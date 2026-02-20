@@ -20,9 +20,14 @@ export abstract class BaseScraper {
   abstract readonly bankName: string
   abstract readonly loginUrl: string
 
+  /** 設為 true 則使用 connectOverCDP 連接已開啟的 Chrome（繞過反爬蟲） */
+  readonly useCDP: boolean = false
+  readonly cdpUrl: string = 'http://localhost:9222'
+
   protected browser: Browser | null = null
   protected context: BrowserContext | null = null
   protected page: Page | null = null
+  private isCDP = false
 
   // ─── 子類別必須實作 ───
 
@@ -62,15 +67,27 @@ export abstract class BaseScraper {
     }
 
     try {
-      logger.info(`[${this.bankName}] 啟動瀏覽器...`)
-      this.browser = await chromium.launch({ headless: options.headless })
-      this.context = await this.browser.newContext({
-        locale: 'zh-TW',
-        timezoneId: 'Asia/Taipei',
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      })
-      this.page = await this.context.newPage()
-      this.page.setDefaultTimeout(options.timeout)
+      if (this.useCDP) {
+        logger.info(`[${this.bankName}] 連接 Chrome CDP: ${this.cdpUrl}`)
+        this.browser = await chromium.connectOverCDP(this.cdpUrl)
+        this.isCDP = true
+        const contexts = this.browser.contexts()
+        this.context = contexts[0] ?? null
+        // 使用既有的分頁或建立新分頁
+        const pages = this.context?.pages() ?? []
+        this.page = pages[0] ?? await this.context!.newPage()
+        this.page.setDefaultTimeout(options.timeout)
+      } else {
+        logger.info(`[${this.bankName}] 啟動瀏覽器...`)
+        this.browser = await chromium.launch({ headless: options.headless })
+        this.context = await this.browser.newContext({
+          locale: 'zh-TW',
+          timezoneId: 'Asia/Taipei',
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        })
+        this.page = await this.context.newPage()
+        this.page.setDefaultTimeout(options.timeout)
+      }
 
       // 登入
       logger.info(`[${this.bankName}] 前往登入頁面: ${this.loginUrl}`)
@@ -116,8 +133,13 @@ export abstract class BaseScraper {
 
   private async cleanup(): Promise<void> {
     try {
-      if (this.context) await this.context.close()
-      if (this.browser) await this.browser.close()
+      if (this.isCDP) {
+        // CDP 模式：只斷開連線，不關閉瀏覽器
+        if (this.browser) await (this.browser as any).close?.()
+      } else {
+        if (this.context) await this.context.close()
+        if (this.browser) await this.browser.close()
+      }
     } catch {
       // ignore cleanup errors
     }
