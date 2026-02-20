@@ -350,8 +350,8 @@ export class EsunScraper extends BaseScraper {
             const currentBalance = this.parseAmount(totalAmount) - this.parseAmount(paidAmount)
 
             cards.push({
-              cardNumber: '玉山信用卡',
-              cardName: `玉山信用卡 ${billMonth}`,
+              cardNumber: '',
+              cardName: '玉山信用卡',
               currentBalance,
               minimumPayment: 0,
               creditLimit,

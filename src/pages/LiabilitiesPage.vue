@@ -76,7 +76,7 @@ async function saveCustomLiability() {
       >
         <div>
           <p class="font-semibold">{{ c.bankName }} {{ c.cardName }}</p>
-          <p class="text-sm text-text-secondary">****{{ c.cardNumber }}</p>
+          <p v-if="c.cardNumber" class="text-sm text-text-secondary">**** {{ c.cardNumber }}</p>
         </div>
         <div class="mt-2">
           <div class="flex justify-between text-sm">

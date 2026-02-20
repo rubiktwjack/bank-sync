@@ -1,14 +1,52 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import TopBar from '../components/layout/TopBar.vue'
 import { useAssetStore } from '../stores/assets'
 import { formatCurrency, maskAccountNumber, timeAgo } from '../utils/format'
-import { Plus, Landmark, Globe, Package, Trash2 } from 'lucide-vue-next'
+import { Plus, Landmark, Globe, Package, Trash2, ChevronDown } from 'lucide-vue-next'
 
 const store = useAssetStore()
 
 type TabType = 'deposit' | 'foreign' | 'custom'
 const activeTab = ref<TabType>('deposit')
+
+// 按銀行分組台幣存款
+const depositsByBank = computed(() => {
+  const banks = new Map<string, typeof store.deposits>()
+  for (const d of store.deposits) {
+    if (!banks.has(d.bankName)) banks.set(d.bankName, [])
+    banks.get(d.bankName)!.push(d)
+  }
+  return Array.from(banks.entries()).map(([bankName, items]) => ({
+    bankName,
+    items,
+    total: items.reduce((s, d) => s + d.balance, 0),
+  }))
+})
+
+// 按銀行分組外幣存款
+const foreignByBank = computed(() => {
+  const banks = new Map<string, typeof store.foreignDeposits>()
+  for (const f of store.foreignDeposits) {
+    if (!banks.has(f.bankName)) banks.set(f.bankName, [])
+    banks.get(f.bankName)!.push(f)
+  }
+  return Array.from(banks.entries()).map(([bankName, items]) => ({
+    bankName,
+    items,
+    totalTWD: items.reduce((s, f) => s + (f.twdEquivalent || 0), 0),
+  }))
+})
+
+// 摺疊狀態
+const expanded = ref<Set<string>>(new Set())
+function toggle(bankName: string) {
+  if (expanded.value.has(bankName)) {
+    expanded.value.delete(bankName)
+  } else {
+    expanded.value.add(bankName)
+  }
+}
 
 // Add custom asset form
 const showCustomForm = ref(false)
@@ -69,24 +107,53 @@ async function saveCustomAsset() {
       </button>
     </div>
 
-    <!-- Deposit list -->
+    <!-- Deposit list (grouped by bank) -->
     <div v-if="activeTab === 'deposit'" class="px-4 space-y-3">
       <div
-        v-for="d in store.deposits"
-        :key="d.id"
-        class="bg-surface rounded-2xl p-4"
+        v-for="group in depositsByBank"
+        :key="group.bankName"
+        class="bg-surface rounded-2xl overflow-hidden"
       >
-        <div>
-          <p class="font-semibold">{{ d.bankName }}</p>
-          <p class="text-sm text-text-secondary">
-            {{ d.accountType === 'savings' ? '活儲' : d.accountType === 'checking' ? '活存' : '定存' }}
-            {{ maskAccountNumber(d.accountNumber) }}
-          </p>
-        </div>
-        <p class="text-xl font-bold text-asset mt-2">{{ formatCurrency(d.balance) }}</p>
-        <div class="flex gap-4 mt-2 text-xs text-text-secondary">
-          <span v-if="d.interestRate">利率 {{ d.interestRate }}%</span>
-          <span>{{ timeAgo(d.lastUpdated) }}</span>
+        <!-- Bank header -->
+        <button
+          @click="toggle('d-' + group.bankName)"
+          class="flex items-center justify-between w-full px-4 py-3 cursor-pointer"
+        >
+          <div class="flex items-center gap-2">
+            <Landmark :size="16" class="text-primary" />
+            <span class="font-semibold text-sm">{{ group.bankName }}</span>
+            <span class="text-xs text-text-secondary">{{ group.items.length }} 筆</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold text-asset">{{ formatCurrency(group.total) }}</span>
+            <ChevronDown
+              :size="16"
+              class="text-text-secondary transition-transform duration-200"
+              :class="{ 'rotate-180': expanded.has('d-' + group.bankName) }"
+            />
+          </div>
+        </button>
+        <!-- Accounts -->
+        <div v-show="expanded.has('d-' + group.bankName)" class="border-t border-border">
+          <div
+            v-for="d in group.items"
+            :key="d.id"
+            class="px-4 py-3 border-b border-border last:border-b-0"
+          >
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium">
+                  {{ d.accountType === 'savings' ? '活儲' : d.accountType === 'checking' ? '活存' : '定存' }}
+                  {{ maskAccountNumber(d.accountNumber) }}
+                </p>
+                <div class="flex gap-3 mt-0.5 text-xs text-text-secondary">
+                  <span v-if="d.interestRate">利率 {{ d.interestRate }}%</span>
+                  <span>{{ timeAgo(d.lastUpdated) }}</span>
+                </div>
+              </div>
+              <p class="text-base font-bold text-asset">{{ formatCurrency(d.balance) }}</p>
+            </div>
+          </div>
         </div>
       </div>
       <div v-if="store.deposits.length === 0" class="text-center py-12 text-text-secondary text-sm">
@@ -94,21 +161,52 @@ async function saveCustomAsset() {
       </div>
     </div>
 
-    <!-- Foreign deposit list -->
+    <!-- Foreign deposit list (grouped by bank) -->
     <div v-if="activeTab === 'foreign'" class="px-4 space-y-3">
       <div
-        v-for="f in store.foreignDeposits"
-        :key="f.id"
-        class="bg-surface rounded-2xl p-4"
+        v-for="group in foreignByBank"
+        :key="group.bankName"
+        class="bg-surface rounded-2xl overflow-hidden"
       >
-        <div>
-          <p class="font-semibold">{{ f.bankName }} <span class="text-primary">({{ f.currency }})</span></p>
-          <p class="text-sm text-text-secondary">{{ maskAccountNumber(f.accountNumber) }}</p>
-        </div>
-        <p class="text-xl font-bold text-asset mt-2">{{ formatCurrency(f.balance, f.currency) }}</p>
-        <p class="text-sm text-text-secondary mt-1">≈ {{ formatCurrency(f.twdEquivalent) }} (匯率 {{ f.exchangeRate.toFixed(2) }})</p>
-        <div class="flex gap-4 mt-2 text-xs text-text-secondary">
-          <span>{{ timeAgo(f.lastUpdated) }}</span>
+        <!-- Bank header -->
+        <button
+          @click="toggle('f-' + group.bankName)"
+          class="flex items-center justify-between w-full px-4 py-3 cursor-pointer"
+        >
+          <div class="flex items-center gap-2">
+            <Globe :size="16" class="text-primary" />
+            <span class="font-semibold text-sm">{{ group.bankName }}</span>
+            <span class="text-xs text-text-secondary">{{ group.items.length }} 筆</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold text-asset">≈ {{ formatCurrency(group.totalTWD) }}</span>
+            <ChevronDown
+              :size="16"
+              class="text-text-secondary transition-transform duration-200"
+              :class="{ 'rotate-180': expanded.has('f-' + group.bankName) }"
+            />
+          </div>
+        </button>
+        <!-- Accounts -->
+        <div v-show="expanded.has('f-' + group.bankName)" class="border-t border-border">
+          <div
+            v-for="f in group.items"
+            :key="f.id"
+            class="px-4 py-3 border-b border-border last:border-b-0"
+          >
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium">
+                  <span class="text-primary">{{ f.currency }}</span>
+                  {{ maskAccountNumber(f.accountNumber) }}
+                </p>
+                <p class="text-xs text-text-secondary mt-0.5">
+                  ≈ {{ formatCurrency(f.twdEquivalent) }} · 匯率 {{ f.exchangeRate?.toFixed(2) }}
+                </p>
+              </div>
+              <p class="text-base font-bold text-asset">{{ formatCurrency(f.balance, f.currency) }}</p>
+            </div>
+          </div>
         </div>
       </div>
       <div v-if="store.foreignDeposits.length === 0" class="text-center py-12 text-text-secondary text-sm">
