@@ -1,0 +1,81 @@
+name: Bank Sync Scraper
+
+on:
+  # 每週一台灣時間早上 8 點 (UTC 0:00)
+  schedule:
+    - cron: '0 0 * * 1'
+  # 手動觸發（PWA 同步按鈕用）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install scraper dependencies
+        working-directory: scrapers
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: scrapers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run scrapers
+        working-directory: scrapers
+        env:
+          # ── 在 GitHub Secrets 設定以下環境變數 ──
+          # 玉山銀行
+          BANK_ESUN_ENABLED: ${{ secrets.BANK_ESUN_ENABLED }}
+          BANK_ESUN_USERNAME: ${{ secrets.BANK_ESUN_USERNAME }}
+          BANK_ESUN_PASSWORD: ${{ secrets.BANK_ESUN_PASSWORD }}
+          BANK_ESUN_EXTRA_CUSTID: ${{ secrets.BANK_ESUN_EXTRA_CUSTID }}
+          # 中國信託
+          BANK_CTBC_ENABLED: ${{ secrets.BANK_CTBC_ENABLED }}
+          BANK_CTBC_USERNAME: ${{ secrets.BANK_CTBC_USERNAME }}
+          BANK_CTBC_PASSWORD: ${{ secrets.BANK_CTBC_PASSWORD }}
+          # 遠東銀行
+          BANK_FEIB_ENABLED: ${{ secrets.BANK_FEIB_ENABLED }}
+          BANK_FEIB_USERNAME: ${{ secrets.BANK_FEIB_USERNAME }}
+          BANK_FEIB_PASSWORD: ${{ secrets.BANK_FEIB_PASSWORD }}
+          # 永豐銀行
+          BANK_SINOPAC_ENABLED: ${{ secrets.BANK_SINOPAC_ENABLED }}
+          BANK_SINOPAC_USERNAME: ${{ secrets.BANK_SINOPAC_USERNAME }}
+          BANK_SINOPAC_PASSWORD: ${{ secrets.BANK_SINOPAC_PASSWORD }}
+          # LINE Bank
+          BANK_LINEBANK_ENABLED: ${{ secrets.BANK_LINEBANK_ENABLED }}
+          BANK_LINEBANK_USERNAME: ${{ secrets.BANK_LINEBANK_USERNAME }}
+          BANK_LINEBANK_PASSWORD: ${{ secrets.BANK_LINEBANK_PASSWORD }}
+          # 爬蟲設定
+          SCRAPER_HEADLESS: 'true'
+          SCRAPER_TIMEOUT: '30000'
+          SCRAPER_RETRIES: '2'
+          # 加密金鑰
+          SYNC_ENCRYPTION_KEY: ${{ secrets.SYNC_ENCRYPTION_KEY }}
+        run: npm run scrape
+
+      - name: Commit encrypted data
+        run: |
+          git config user.name "bank-sync-bot"
+          git config user.email "bot@bank-sync"
+          git add data/latest.json.enc
+          # 只在有變更時 commit
+          git diff --staged --quiet || git commit -m "sync: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push
+
+  # 爬完自動重新部署 GitHub Pages
+  deploy:
+    needs: scrape
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

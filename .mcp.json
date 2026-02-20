@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "cmd",
+      "args": ["/c", "npx", "@anthropic-ai/chrome-devtools-mcp@latest"]
+    }
+  }
+}

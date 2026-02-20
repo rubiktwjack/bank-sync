@@ -1,0 +1,40 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# 環境變數（含銀行帳密，絕對不要 commit）
+.env
+.env.*
+scrapers/.env
+
+# 爬蟲實際資料（明文含敏感帳戶資訊，絕對不要 commit）
+data/latest.json
+# 加密版本允許 commit（由 GitHub Actions 產生）
+!data/latest.json.enc
+
+# Claude Code 本地設定
+.claude/
+
+# 本地測試用資料副本
+public/data/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

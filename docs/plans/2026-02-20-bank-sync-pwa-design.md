@@ -1,7 +1,7 @@
 # Bank Sync PWA — Brainstorming Design Document
 
 > Date: 2026-02-20
-> Status: Draft — Awaiting Approval
+> Status: Draft — Approved Direction (Vue + Mobile-Only)
 
 ---
 
@@ -97,60 +97,60 @@ Phase 3: 支援更多銀行 → 逐步擴充 parser
 
 | 層級 | 技術選擇 | 理由 |
 |------|----------|------|
-| **Framework** | React 19 + TypeScript | 生態系最成熟，元件豐富 |
+| **Framework** | Vue 3 + TypeScript | 用戶偏好，Composition API 簡潔 |
 | **Build Tool** | Vite 6 | 快速建置，原生 PWA 插件 |
 | **PWA** | vite-plugin-pwa | Service Worker 自動生成，離線支援 |
-| **Styling** | Tailwind CSS 4 | 快速開發 dashboard UI，原子化 CSS |
+| **Styling** | Tailwind CSS 4 | 快速開發 mobile UI，原子化 CSS |
 | **Local DB** | Dexie.js (IndexedDB) | 型別安全的 IndexedDB 封裝，支援複雜查詢 |
-| **Charts** | Recharts | React 原生圖表庫，輕量 |
-| **Routing** | React Router 7 | SPA 路由 |
-| **State** | Zustand | 輕量級狀態管理 |
+| **Charts** | Chart.js + vue-chartjs | 輕量、框架無關，Vue 封裝完善 |
+| **Routing** | Vue Router 4 | Vue 官方路由 |
+| **State** | Pinia | Vue 官方狀態管理，TypeScript 友善 |
 | **i18n** | 預設中文 | 目標用戶為台灣用戶 |
-| **Icons** | Lucide React | 輕量、一致的圖示庫 |
+| **Icons** | Lucide Vue Next | 輕量、一致的圖示庫 |
+| **目標裝置** | 手機優先（Mobile-Only） | 用戶主要在手機上使用 |
 
 ### 4.2 專案結構
 
 ```
 bank-sync/
 ├── public/
-│   ├── manifest.json          # PWA manifest
 │   ├── icons/                 # App icons (各尺寸)
-│   └── sw.js                  # Service Worker
+│   └── favicon.ico
 ├── src/
-│   ├── main.tsx               # Entry point
-│   ├── App.tsx                # Root component
+│   ├── main.ts                # Entry point
+│   ├── App.vue                # Root component
 │   ├── components/
 │   │   ├── layout/
-│   │   │   ├── Sidebar.tsx    # 側邊欄導航
-│   │   │   ├── Header.tsx     # 頂部列
-│   │   │   └── Layout.tsx     # 主要版面
+│   │   │   ├── BottomNav.vue  # 底部 Tab 導航
+│   │   │   ├── TopBar.vue     # 頂部列（標題 + 動作按鈕）
+│   │   │   └── AppLayout.vue  # 主要版面
 │   │   ├── dashboard/
-│   │   │   ├── AssetSummary.tsx      # 資產總覽卡片
-│   │   │   ├── NetWorthCard.tsx      # 淨值卡片
-│   │   │   ├── AssetDistribution.tsx # 資產分佈圖
-│   │   │   └── RecentActivity.tsx    # 近期活動
+│   │   │   ├── AssetSummary.vue      # 資產總覽卡片
+│   │   │   ├── NetWorthCard.vue      # 淨值卡片
+│   │   │   ├── AssetDistribution.vue # 資產分佈圖
+│   │   │   └── RecentActivity.vue    # 近期活動
 │   │   ├── accounts/
-│   │   │   ├── DepositCard.tsx       # 台幣存款卡片
-│   │   │   ├── ForeignDepositCard.tsx# 外幣存款卡片
-│   │   │   ├── CreditCardCard.tsx    # 信用卡卡片
-│   │   │   └── LoanCard.tsx          # 貸款卡片
+│   │   │   ├── DepositCard.vue       # 台幣存款卡片
+│   │   │   ├── ForeignDepositCard.vue# 外幣存款卡片
+│   │   │   ├── CreditCardCard.vue    # 信用卡卡片
+│   │   │   └── LoanCard.vue          # 貸款卡片
 │   │   ├── custom-assets/
-│   │   │   ├── CustomAssetForm.tsx   # 自訂資產表單
-│   │   │   └── CustomAssetList.tsx   # 自訂資產列表
+│   │   │   ├── CustomAssetForm.vue   # 自訂資產表單
+│   │   │   └── CustomAssetList.vue   # 自訂資產列表
 │   │   └── import/
-│   │       ├── FileImport.tsx        # 檔案匯入元件
-│   │       └── ManualEntry.tsx       # 手動輸入元件
+│   │       ├── FileImport.vue        # 檔案匯入元件
+│   │       └── ManualEntry.vue       # 手動輸入元件
 │   ├── db/
 │   │   ├── schema.ts          # Dexie schema 定義
 │   │   ├── database.ts        # DB 實例
 │   │   └── migrations.ts      # 版本遷移
 │   ├── stores/
-│   │   ├── useAssetStore.ts   # 資產狀態
-│   │   └── useSettingStore.ts # 設定狀態
-│   ├── hooks/
-│   │   ├── useAccounts.ts     # 帳戶資料 hook
-│   │   ├── useCurrency.ts     # 匯率 hook
-│   │   └── useNetWorth.ts     # 淨值計算 hook
+│   │   ├── assets.ts          # 資產狀態 (Pinia)
+│   │   └── settings.ts        # 設定狀態 (Pinia)
+│   ├── composables/
+│   │   ├── useAccounts.ts     # 帳戶資料 composable
+│   │   ├── useCurrency.ts     # 匯率 composable
+│   │   └── useNetWorth.ts     # 淨值計算 composable
 │   ├── parsers/
 │   │   ├── types.ts           # Parser 共用型別
 │   │   ├── cathay.ts          # 國泰世華 parser
@@ -159,14 +159,11 @@ bank-sync/
 │   │   ├── fubon.ts           # 富邦 parser
 │   │   └── taishin.ts         # 台新 parser
 │   ├── pages/
-│   │   ├── Dashboard.tsx      # 儀表板頁面
-│   │   ├── Deposits.tsx       # 台幣存款頁面
-│   │   ├── ForeignDeposits.tsx# 外幣存款頁面
-│   │   ├── CreditCards.tsx    # 信用卡頁面
-│   │   ├── Loans.tsx          # 貸款頁面
-│   │   ├── CustomAssets.tsx   # 自訂資產頁面
-│   │   ├── Import.tsx         # 匯入頁面
-│   │   └── Settings.tsx       # 設定頁面
+│   │   ├── DashboardPage.vue  # 儀表板頁面
+│   │   ├── AssetsPage.vue     # 資產總覽頁面（存款+外幣+自訂）
+│   │   ├── LiabilitiesPage.vue# 負債頁面（信用卡+貸款）
+│   │   ├── ImportPage.vue     # 匯入頁面
+│   │   └── SettingsPage.vue   # 設定頁面
 │   ├── types/
 │   │   └── index.ts           # 共用型別定義
 │   └── utils/
@@ -293,41 +290,51 @@ class BankSyncDB extends Dexie {
 
 ---
 
-## 6. UI 設計
+## 6. UI 設計（Mobile-Only）
 
 ### 6.1 頁面結構
 
-參考附件圖片的卡片式設計風格，整體版面分為：
+手機優先設計，底部 Tab 導航，無側邊欄：
 
 ```
-┌──────────────────────────────────────────────────┐
-│  Header: Bank Sync logo + 通知 + 設定             │
-├────────┬─────────────────────────────────────────┤
-│        │                                         │
-│  側    │   主要內容區域                             │
-│  邊    │                                         │
-│  欄    │   ┌─────────┐ ┌─────────┐ ┌──────────┐ │
-│        │   │ 總資產   │ │ 總負債   │ │ 淨值     │ │
-│  導    │   │ 卡片    │ │ 卡片    │ │ 卡片     │ │
-│  航    │   └─────────┘ └─────────┘ └──────────┘ │
-│        │                                         │
-│  📊    │   ┌──────────────────────────────────┐  │
-│  Dashboard │ 資產分佈圓餅圖                      │  │
-│  🏦    │   └──────────────────────────────────┘  │
-│  存款  │                                         │
-│  💱    │   ┌───────────┐ ┌───────────┐           │
-│  外幣  │   │ 玉山銀行   │ │ 中信銀行   │          │
-│  💳    │   │ TWD 150K  │ │ TWD 80K   │          │
-│  信用卡 │   └───────────┘ └───────────┘           │
-│  🏠    │                                         │
-│  貸款  │   ┌───────────┐ ┌───────────┐           │
-│  📦    │   │ USD 帳戶   │ │ JPY 帳戶   │          │
-│  自訂  │   │ $5,000    │ │ ¥200,000  │          │
-│  📥    │   └───────────┘ └───────────┘           │
-│  匯入  │                                         │
-│        │                                         │
-└────────┴─────────────────────────────────────────┘
+┌─────────────────────────┐
+│  Bank Sync        ⚙️     │  ← TopBar
+├─────────────────────────┤
+│                         │
+│  ┌───────────────────┐  │
+│  │  淨值              │  │
+│  │  NT$ 2,350,000    │  │
+│  │  ▲ +12,500 本月   │  │
+│  └───────────────────┘  │
+│                         │
+│  ┌────────┐ ┌────────┐  │
+│  │ 總資產  │ │ 總負債  │  │
+│  │ 8.2M   │ │ 5.8M   │  │
+│  └────────┘ └────────┘  │
+│                         │
+│  ┌───────────────────┐  │
+│  │  資產分佈圓餅圖     │  │
+│  └───────────────────┘  │
+│                         │
+│  ┌───────────────────┐  │
+│  │ 玉山 活儲 ****1234 │  │
+│  │ NT$ 152,380       │  │
+│  └───────────────────┘  │
+│  ┌───────────────────┐  │
+│  │ 中信 Line Pay 卡   │  │
+│  │ 應繳 NT$ 12,500   │  │
+│  └───────────────────┘  │
+│                         │
+├─────────────────────────┤
+│ 總覽 │ 資產 │ 負債 │ 更多 │  ← BottomNav (4 tabs)
+└─────────────────────────┘
 ```
+
+**底部 Tab 設計（4 個 Tab）：**
+- **總覽**：Dashboard 淨值 + 資產分佈 + 快速概覽
+- **資產**：台幣存款 + 外幣存款 + 自訂資產
+- **負債**：信用卡 + 貸款
+- **更多**：匯入/匯出、設定、備份
 
 ### 6.2 色彩方案
 
@@ -343,9 +350,8 @@ class BankSyncDB extends Dexie {
 背景:
   - Background: #F8FAFC (Slate-50)   — 頁面背景
   - Card:       #FFFFFF              — 卡片白底
-  - Sidebar:    #1E293B (Slate-800)  — 深色側邊欄
 
-支援 Dark Mode:
+支援 Dark Mode（Phase 2）:
   - Bg Dark:    #0F172A (Slate-900)
   - Card Dark:  #1E293B (Slate-800)
 ```
@@ -407,8 +413,8 @@ class BankSyncDB extends Dexie {
 | F7 | 手動資料輸入 | 表單方式手動輸入帳戶資料 |
 | F8 | CSV/Excel 匯入 | 解析銀行匯出的檔案 |
 | F9 | 資料匯出/備份 | 匯出 JSON 備份檔 |
-| F10 | PWA 安裝 | 可安裝到手機/桌面，離線可用 |
-| F11 | 響應式設計 | 手機、平板、桌面都能良好使用 |
+| F10 | PWA 安裝 | 可安裝到手機，離線可用 |
+| F11 | Mobile-Only 設計 | 專為手機螢幕最佳化，底部 Tab 導航 |
 
 ### 7.2 增強功能（Phase 2）
 
@@ -483,9 +489,9 @@ interface ParseResult {
 ## 10. 開發階段規劃
 
 ### Phase 1：MVP（核心功能）
-1. 專案初始化（Vite + React + TypeScript + Tailwind + PWA）
-2. 資料模型和 IndexedDB 設定
-3. Layout 框架（側邊欄 + 主內容區）
+1. 專案初始化（Vite + Vue 3 + TypeScript + Tailwind + PWA）
+2. 資料模型和 IndexedDB 設定（Dexie.js）
+3. Mobile Layout 框架（底部 Tab + 頂部列）
 4. Dashboard 總覽頁面
 5. 各資產類別 CRUD 頁面
 6. 自訂資產功能
@@ -493,7 +499,6 @@ interface ParseResult {
 8. CSV 匯入基礎功能
 9. 資料匯出/備份
 10. PWA 設定和離線支援
-11. 響應式設計調整
 
 ### Phase 2：增強功能
 12. Chrome Extension 開發
@@ -509,22 +514,158 @@ interface ParseResult {
 
 | 決策 | 選擇 | 理由 |
 |------|------|------|
-| Framework | React + Vite | 生態系成熟，社群資源豐富，適合 PWA |
-| 狀態管理 | Zustand | 比 Redux 輕量，比 Context 強大 |
+| Framework | Vue 3 + Vite | 用戶偏好，Composition API 簡潔 |
+| 狀態管理 | Pinia | Vue 官方推薦，TypeScript 友善 |
 | 本地資料庫 | Dexie.js | IndexedDB 最佳封裝，型別安全 |
-| CSS | Tailwind | 快速開發 dashboard，utility-first |
+| CSS | Tailwind | 快速開發 mobile UI，utility-first |
 | 資料來源策略 | 混合模式 | 先手動匯入，後續加入 Extension |
-| 圖表 | Recharts | React 原生，輕量夠用 |
+| 圖表 | Chart.js + vue-chartjs | 輕量、Vue 封裝完善 |
+| 設計方向 | Mobile-Only | 用戶只需手機使用，底部 Tab 導航 |
 
 ---
 
-## Approval Required
+## 12. 市場研究與驗證
 
-以上是 Bank Sync PWA 的完整 brainstorming 設計。請確認：
+### 12.1 台灣 Open Banking 現狀
 
-1. **技術選擇**是否符合你的偏好？（React/Vue/其他）
-2. **資料來源策略**（先手動匯入 → 後加 Extension）是否 OK？
-3. **功能範圍**有沒有要新增或移除的？
-4. **UI 設計方向**是否符合你的期望？
+台灣金管會推動 Open Banking 三階段：
+- **Phase 1**（產品資訊）：已上線
+- **Phase 2**（客戶資料查詢）：已上線，但僅剩 TDCC（集保結算所）一家 TSP 營運
+- **Phase 3**（交易功能）：2024 年才開放申請
 
-確認後我會進入 implementation plan 階段。
+**結論**：台灣目前**沒有可用的 Open Banking API 生態系統**來存取個人銀行資料。Web scraping / 手動匯入是現階段唯一可行的方案。
+
+### 12.2 既有開源專案分析
+
+**台灣銀行相關開源專案**：目前沒有任何開源專案做台灣銀行的個人帳戶/交易資料抓取。既有專案都僅限於**匯率**爬取：
+- `bot_exrate_parser` — 台灣銀行匯率爬蟲（Go）
+- `bank_of_taiwan_exchange_rate_crawler` — 台銀匯率爬蟲
+- `FinMind` — 台灣金融市場資料（股票、基本面）
+
+**最佳參考架構**：[israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers)
+- Node.js + Puppeteer 架構
+- `BaseScraper` → `BaseScraperWithBrowser` → 各銀行 Scraper 的類別繼承
+- 標準化輸出格式：`{ success, accounts: [{ accountNumber, txns }] }`
+- 已建立完整生態系（Moneyman、Firefly III importer、Actual Budget importer）
+
+### 12.3 競品分析
+
+| 專案 | 多幣別 | PWA | 純前端 | 台灣銀行 |
+|------|--------|-----|--------|----------|
+| Ghostfolio | Yes | Yes | No (需 NestJS+PostgreSQL) | No |
+| Firefly III | Yes | No | No (PHP+Server) | No |
+| Actual Budget | 有限 | 部分 | 部分 (SQLite) | No |
+| Maybe Finance | Yes | No | No (Rails) | No |
+| **Bank Sync (本專案)** | **Yes** | **Yes** | **Yes** | **Yes** |
+
+**市場缺口確認**：目前沒有任何開源專案同時滿足 PWA + 純前端 + 多幣別 + 台灣銀行整合。本專案填補了一個真實的需求缺口。
+
+### 12.4 Dexie.js 選擇驗證
+
+| IndexedDB 封裝庫 | 週下載量 | 大小 | 加密 | 適用場景 |
+|-----------------|---------|------|------|---------|
+| **Dexie.js** | ~727K | ~29KB gzipped | 手動 | 簡單易用，WhatsApp Web/GitHub Desktop 在用 |
+| RxDB | ~65K | 模組化 | 內建 (Web Crypto) | 需加密和 schema 驗證的場景 |
+| PouchDB | ~60K | ~46KB gzipped | 手動 | 需要 CouchDB 同步 |
+
+Dexie.js 為最佳選擇：最大社群、最輕量、型別安全。如未來需要加密，可搭配 Web Crypto API (AES-GCM + PBKDF2) 實作。
+
+---
+
+## User Feedback (2026-02-20)
+
+- **Framework**: Vue 3（用戶選擇）
+- **功能範圍**: 無調整
+- **UI 設計**: 需要先看到再調整
+- **整體方向**: 手機優先，不需要桌機版或原生 app
+- **策略**: 先做出來，邊看邊調
+
+---
+
+## 13. 架構變更：GitHub Actions 爬蟲 + GitHub Pages（2026-02-20）
+
+### 13.1 變更原因
+
+用戶需求澄清：
+- **不堅持 PWA**，但仍不要後端（不想建 server）
+- 需要**網路爬蟲自動抓取銀行資料**，帳密 hardcode
+- 手機上要能看到同步結果
+
+### 13.2 新架構
+
+```
+GitHub Actions (定時 cron)
+  └── Playwright 爬蟲
+      ├── 國泰世華 Scraper
+      ├── 中國信託 Scraper
+      ├── 玉山銀行 Scraper
+      ├── 台北富邦 Scraper
+      └── 台新銀行 Scraper
+          │
+          ▼
+      data/latest.json (commit 到 repo)
+          │
+          ▼
+GitHub Pages (靜態前端)
+  └── Vue 3 App 讀取 data/latest.json
+          │
+          ▼
+      手機瀏覽器打開即可查看
+```
+
+### 13.3 爬蟲插件架構
+
+```
+scrapers/
+├── package.json              # Node.js 獨立套件
+├── tsconfig.json
+├── src/
+│   ├── types.ts              # 爬蟲輸出標準格式
+│   ├── base-scraper.ts       # 基底類別（登入、爬取流程）
+│   ├── runner.ts             # 主程式（讀取設定、執行爬蟲、輸出 JSON）
+│   ├── banks/
+│   │   ├── index.ts          # 銀行註冊表
+│   │   ├── cathay.ts         # 國泰世華
+│   │   ├── ctbc.ts           # 中國信託
+│   │   ├── esun.ts           # 玉山銀行
+│   │   ├── fubon.ts          # 台北富邦
+│   │   └── taishin.ts        # 台新銀行
+│   └── utils/
+│       ├── logger.ts         # 日誌
+│       └── retry.ts          # 重試機制
+```
+
+**新增銀行步驟：**
+1. 在 `scrapers/src/banks/` 新建 `xxx.ts`，繼承 `BaseScraper`
+2. 實作 `login()` 和需要的 `scrapeXxx()` 方法
+3. 在 `banks/index.ts` 註冊
+4. 在 GitHub Secrets 加入帳密環境變數
+
+### 13.4 帳密管理
+
+帳密存在 **GitHub Secrets**，不進入 code：
+
+```
+BANK_XXX_ENABLED=true
+BANK_XXX_USERNAME=<your-username>
+BANK_XXX_PASSWORD=<your-password>
+BANK_XXX_EXTRA_FIELD=<value>
+```
+
+### 13.5 前端資料流
+
+1. GitHub Actions 每天定時跑爬蟲
+2. 爬完的 JSON commit 到 `data/latest.json`
+3. GitHub Pages 自動重新部署
+4. 前端 `loadSyncData()` 從 `./data/latest.json` fetch 資料
+5. 爬蟲資料 (source='scraper') 寫入 IndexedDB，不覆蓋手動資料 (source='manual')
+6. 手機打開 GitHub Pages URL 即可看到最新資料
+
+### 13.6 決策更新
+
+| 決策 | 選擇 | 理由 |
+|------|------|------|
+| 資料來源 | GitHub Actions + Playwright 爬蟲 | 無需 server、全自動、帳密安全存放 |
+| 部署方式 | GitHub Pages | 免費、自動部署、手機可開 |
+| 爬蟲框架 | Playwright | 比 Puppeteer 更穩定，API 更好用 |
+| 帳密儲存 | GitHub Secrets → 環境變數 | 加密存放，不進 code |
