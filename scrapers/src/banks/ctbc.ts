@@ -59,16 +59,14 @@ export class CtbcScraper extends BaseScraper {
   readonly bankId = 'ctbc'
   readonly bankName = '中國信託'
   readonly loginUrl = 'https://www.ctbcbank.com/newweb/'
-  readonly useCDP = true
 
   async login(page: Page, credentials: BankCredentials): Promise<boolean> {
-    // 等待 Angular 載入完成
-    await page.waitForTimeout(5000)
+    // 等待 Angular 載入完成（SPA 需要較長時間）
+    await page.waitForTimeout(8000)
 
     // 檢查是否已經登入（頁面有 "Hi," 開頭的歡迎文字）
     const bodyText = await page.locator('body').innerText().catch(() => '')
-    const isLoggedIn = bodyText.includes('Hi,') && bodyText.includes('我的總覽')
-    if (isLoggedIn) {
+    if (bodyText.includes('Hi,') && bodyText.includes('我的總覽')) {
       logger.info('[中國信託] 已處於登入狀態，導覽到總覽頁')
       await this.navigateTo(page, '我的總覽')
       return true
@@ -77,8 +75,14 @@ export class CtbcScraper extends BaseScraper {
     // 檢查是否在登入頁
     const hasLoginForm = await page.locator(SELECTORS.login.custidInput).isVisible().catch(() => false)
     if (!hasLoginForm) {
-      logger.error('[中國信託] 無法載入登入頁面')
-      return false
+      // Angular 可能還沒完全載入，再等一下
+      logger.info('[中國信託] 等待 Angular 載入...')
+      try {
+        await page.locator(SELECTORS.login.custidInput).waitFor({ timeout: 15000 })
+      } catch {
+        logger.error('[中國信託] 無法載入登入頁面')
+        return false
+      }
     }
 
     const custid = credentials.extra?.custid
@@ -95,6 +99,17 @@ export class CtbcScraper extends BaseScraper {
     // 點擊登入
     await page.locator(SELECTORS.login.submitButton).click()
     logger.info('[中國信託] 已點擊登入，等待回應...')
+
+    // 等待結果：總覽頁 或 重複登入 modal
+    await page.waitForTimeout(5000)
+
+    // 處理重複登入 modal：「您可能先前未正常登出」→ 按「確認登入」
+    const confirmBtn = page.getByText('確認登入', { exact: true })
+    if (await confirmBtn.isVisible().catch(() => false)) {
+      logger.info('[中國信託] 偵測到重複登入提示，點擊「確認登入」...')
+      await confirmBtn.click()
+      await page.waitForTimeout(5000)
+    }
 
     // 等待總覽頁面出現（登入成功指標）
     try {
