@@ -18,8 +18,8 @@ export default defineConfig({
         name: 'Rex 資產總覽',
         short_name: 'Rex',
         description: '個人資產管理',
-        theme_color: '#6366F1',
-        background_color: '#F8FAFC',
+        theme_color: '#0F172A',
+        background_color: '#0F172A',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

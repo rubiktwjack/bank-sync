@@ -15,7 +15,7 @@ const chartData = computed(() => {
 
   if (store.totalDeposits > 0) {
     segments.push(store.totalDeposits)
-    colors.push('#6366F1')
+    colors.push('#22C55E')
     labels.push('台幣存款')
   }
   if (store.totalForeignTWD > 0) {
@@ -25,12 +25,12 @@ const chartData = computed(() => {
   }
   if (store.totalCustomAssets > 0) {
     segments.push(store.totalCustomAssets)
-    colors.push('#10B981')
+    colors.push('#F59E0B')
     labels.push('自訂資產')
   }
   if (store.totalCreditCardDebt > 0) {
     segments.push(store.totalCreditCardDebt)
-    colors.push('#F59E0B')
+    colors.push('#3B82F6')
     labels.push('信用卡')
   }
   if (store.totalLoanBalance > 0) {
@@ -62,6 +62,7 @@ const chartOptions = {
         usePointStyle: true,
         padding: 16,
         font: { size: 12 },
+        color: '#9CA3AF',
       },
     },
   },
