@@ -55,7 +55,7 @@ async function clearAllData() {
 <template>
   <div>
     <TopBar title="更多" />
-    <div class="px-4 py-4 space-y-3 flex-1">
+    <div class="px-4 py-4 space-y-3">
       <!-- 同步 -->
       <div class="bg-surface rounded-2xl overflow-hidden">
         <h3 class="text-xs font-semibold text-text-secondary px-4 pt-4 pb-2">銀行同步</h3>

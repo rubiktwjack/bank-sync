@@ -8,7 +8,7 @@ import QuickList from '../components/dashboard/QuickList.vue'
 <template>
   <div>
     <TopBar title="Rex 資產總覽" />
-    <div class="px-4 py-4 space-y-4 flex-1">
+    <div class="px-4 py-4 space-y-4">
       <NetWorthCard />
       <AssetDistribution />
       <QuickList />
