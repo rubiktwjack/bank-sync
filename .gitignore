@@ -19,8 +19,9 @@ scrapers/.env
 
 # 爬蟲明文資料（含敏感帳戶資訊，絕對不要 commit）
 data/latest.json
-# 加密版允許 commit（由 GitHub Actions 產生，內容已加密無安全疑慮）
+# 加密版 + 股價由 GitHub Actions 產生並 commit
 !data/latest.json.enc
+!data/stock-prices.json
 
 # Claude Code 本地設定
 .claude/

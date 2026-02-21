@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "scrape": "tsx src/runner.ts",
-    "scrape:dry": "tsx src/runner.ts --dry-run"
+    "scrape:dry": "tsx src/runner.ts --dry-run",
+    "fetch-stocks": "tsx src/fetch-stock-prices.ts"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
