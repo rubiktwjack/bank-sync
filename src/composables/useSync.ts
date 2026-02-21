@@ -271,8 +271,8 @@ export async function triggerSync(): Promise<void> {
     // 等一下讓 GitHub 建立 run
     await sleep(5000)
 
-    // Poll workflow run 狀態（每 15 秒，最多 3 分鐘）
-    const maxAttempts = 12
+    // Poll workflow run 狀態（每 15 秒，最多 10 分鐘）
+    const maxAttempts = 40
     for (let i = 0; i < maxAttempts; i++) {
       const runsRes = await fetch(
         `https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=1`,
