@@ -4,7 +4,7 @@ import BottomNav from './BottomNav.vue'
 
 <template>
   <div class="flex flex-col h-full max-w-lg mx-auto">
-    <main class="flex-1 overflow-y-auto">
+    <main class="flex-1 overflow-y-scroll">
       <router-view />
     </main>
     <BottomNav />
