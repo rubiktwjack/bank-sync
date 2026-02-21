@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import TopBar from '../components/layout/TopBar.vue'
 import { useAssetStore } from '../stores/assets'
 import { formatCurrency, formatDate } from '../utils/format'
-import { Plus, CreditCard as CreditCardIcon, Package, Trash2 } from 'lucide-vue-next'
+import { Plus, CreditCard as CreditCardIcon, Package, Trash2, Pencil } from 'lucide-vue-next'
 
 const store = useAssetStore()
 
@@ -12,6 +12,7 @@ const activeTab = ref<TabType>('credit')
 
 // Custom liability form
 const showCustomForm = ref(false)
+const editingCustomId = ref<string | null>(null)
 const customForm = ref({
   name: '',
   subCategory: '',
@@ -20,17 +21,46 @@ const customForm = ref({
   notes: '',
 })
 
+function openAddCustom() {
+  editingCustomId.value = null
+  customForm.value = { name: '', subCategory: '', value: 0, currency: 'TWD', notes: '' }
+  showCustomForm.value = true
+}
+
+function openEditCustom(a: { id: string; name: string; subCategory: string; value: number; currency: string; notes?: string }) {
+  editingCustomId.value = a.id
+  customForm.value = {
+    name: a.name,
+    subCategory: a.subCategory,
+    value: a.value,
+    currency: a.currency,
+    notes: a.notes || '',
+  }
+  showCustomForm.value = true
+}
+
 async function saveCustomLiability() {
   if (!customForm.value.name) return
-  await store.addCustomAsset({
-    name: customForm.value.name,
-    category: 'liability',
-    subCategory: customForm.value.subCategory,
-    value: customForm.value.value,
-    currency: customForm.value.currency,
-    notes: customForm.value.notes || undefined,
-  })
+  if (editingCustomId.value) {
+    await store.updateCustomAsset(editingCustomId.value, {
+      name: customForm.value.name,
+      subCategory: customForm.value.subCategory,
+      value: customForm.value.value,
+      currency: customForm.value.currency,
+      notes: customForm.value.notes || undefined,
+    })
+  } else {
+    await store.addCustomAsset({
+      name: customForm.value.name,
+      category: 'liability',
+      subCategory: customForm.value.subCategory,
+      value: customForm.value.value,
+      currency: customForm.value.currency,
+      notes: customForm.value.notes || undefined,
+    })
+  }
   customForm.value = { name: '', subCategory: '', value: 0, currency: 'TWD', notes: '' }
+  editingCustomId.value = null
   showCustomForm.value = false
 }
 </script>
@@ -39,7 +69,7 @@ async function saveCustomLiability() {
   <div>
     <TopBar title="負債">
       <template #actions>
-        <button v-if="activeTab === 'custom'" @click="showCustomForm = true" class="w-9 h-9 flex items-center justify-center rounded-full bg-primary/10 text-primary">
+        <button v-if="activeTab === 'custom'" @click="openAddCustom" class="w-9 h-9 flex items-center justify-center rounded-full bg-primary/10 text-primary">
           <Plus :size="20" />
         </button>
       </template>
@@ -106,9 +136,14 @@ async function saveCustomLiability() {
             <p class="font-semibold">{{ a.name }}</p>
             <p v-if="a.subCategory" class="text-sm text-text-secondary">{{ a.subCategory }}</p>
           </div>
-          <button @click="store.deleteCustomAsset(a.id)" class="text-text-secondary p-1">
-            <Trash2 :size="16" />
-          </button>
+          <div class="flex gap-1">
+            <button @click="openEditCustom(a)" class="text-text-secondary p-1">
+              <Pencil :size="16" />
+            </button>
+            <button @click="store.deleteCustomAsset(a.id)" class="text-text-secondary p-1">
+              <Trash2 :size="16" />
+            </button>
+          </div>
         </div>
         <p class="text-xl font-bold text-liability mt-2">{{ formatCurrency(a.value, a.currency) }}</p>
         <p v-if="a.notes" class="text-xs text-text-secondary mt-1">{{ a.notes }}</p>
@@ -122,7 +157,7 @@ async function saveCustomLiability() {
     <Teleport to="body">
       <div v-if="showCustomForm" class="fixed inset-0 z-[60] flex items-end justify-center bg-black/40" @click.self="showCustomForm = false">
         <div class="bg-surface w-full max-w-lg rounded-t-2xl p-5 pb-safe animate-slide-up">
-          <h2 class="text-lg font-bold mb-4">新增自訂負債</h2>
+          <h2 class="text-lg font-bold mb-4">{{ editingCustomId ? '編輯' : '新增' }}自訂負債</h2>
           <div class="space-y-3">
             <div>
               <label class="text-sm text-text-secondary">名稱</label>

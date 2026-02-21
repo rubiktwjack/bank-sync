@@ -2,13 +2,15 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { db } from '../db/database'
-import { toTWD } from '../services/exchangeRate'
+import { toTWD, loadRates } from '../services/exchangeRate'
+import { fetchStockPrices, stockMarketValueTWD, type StockQuote } from '../services/stockPrice'
 import type {
   DepositAccount,
   ForeignDeposit,
   CreditCard,
   Loan,
   CustomAsset,
+  StockHolding,
 } from '../types'
 
 export const useAssetStore = defineStore('assets', () => {
@@ -17,6 +19,8 @@ export const useAssetStore = defineStore('assets', () => {
   const creditCards = ref<CreditCard[]>([])
   const loans = ref<Loan[]>([])
   const customAssets = ref<CustomAsset[]>([])
+  const stocks = ref<StockHolding[]>([])
+  const stockPrices = ref<Record<string, StockQuote>>({})
   const loading = ref(false)
 
   const totalDeposits = computed(() =>
@@ -37,8 +41,15 @@ export const useAssetStore = defineStore('assets', () => {
       .reduce((sum, a) => sum + a.value, 0)
   )
 
+  const totalStocks = computed(() =>
+    stocks.value.reduce(
+      (sum, s) => sum + stockMarketValueTWD(s.shares, stockPrices.value[s.ticker]),
+      0,
+    )
+  )
+
   const totalAssets = computed(() =>
-    totalDeposits.value + totalForeignTWD.value + totalCustomAssets.value
+    totalDeposits.value + totalForeignTWD.value + totalCustomAssets.value + totalStocks.value
   )
 
   const totalCreditCardDebt = computed(() =>
@@ -69,6 +80,13 @@ export const useAssetStore = defineStore('assets', () => {
       creditCards.value = await db.creditCards.toArray()
       loans.value = await db.loans.toArray()
       customAssets.value = await db.customAssets.toArray()
+      stocks.value = await db.stocks.toArray()
+      // 載入匯率 + 股價
+      await loadRates()
+      if (stocks.value.length > 0) {
+        const tickers = stocks.value.map((s) => s.ticker)
+        stockPrices.value = await fetchStockPrices(tickers)
+      }
     } finally {
       loading.value = false
     }
@@ -198,6 +216,46 @@ export const useAssetStore = defineStore('assets', () => {
     customAssets.value = customAssets.value.filter((a) => a.id !== id)
   }
 
+  // Stock CRUD
+  async function addStock(data: Omit<StockHolding, 'id' | 'lastUpdated'>) {
+    const stock: StockHolding = {
+      ...data,
+      id: uuidv4(),
+      lastUpdated: new Date(),
+    }
+    await db.stocks.add(stock)
+    stocks.value.push(stock)
+    // 抓取股價
+    const prices = await fetchStockPrices([stock.ticker])
+    const quote = prices[stock.ticker]
+    if (quote) {
+      stockPrices.value = { ...stockPrices.value, ...prices }
+      if (!stock.name && quote.name) {
+        stock.name = quote.name
+        await db.stocks.update(stock.id, { name: stock.name })
+      }
+    }
+    return stock
+  }
+
+  async function updateStock(id: string, data: Partial<StockHolding>) {
+    await db.stocks.update(id, { ...data, lastUpdated: new Date() })
+    const idx = stocks.value.findIndex((s) => s.id === id)
+    const item = idx !== -1 ? stocks.value[idx] : undefined
+    if (item) Object.assign(item, data, { lastUpdated: new Date() })
+  }
+
+  async function deleteStock(id: string) {
+    await db.stocks.delete(id)
+    stocks.value = stocks.value.filter((s) => s.id !== id)
+  }
+
+  async function refreshStockPrices() {
+    if (stocks.value.length === 0) return
+    const tickers = stocks.value.map((s) => s.ticker)
+    stockPrices.value = await fetchStockPrices(tickers)
+  }
+
   // Export / Import backup
   async function exportBackup(): Promise<string> {
     const data = {
@@ -208,24 +266,27 @@ export const useAssetStore = defineStore('assets', () => {
       creditCards: await db.creditCards.toArray(),
       loans: await db.loans.toArray(),
       customAssets: await db.customAssets.toArray(),
+      stocks: await db.stocks.toArray(),
     }
     return JSON.stringify(data, null, 2)
   }
 
   async function importBackup(json: string) {
     const data = JSON.parse(json)
-    await db.transaction('rw', [db.deposits, db.foreignDeposits, db.creditCards, db.loans, db.customAssets], async () => {
+    await db.transaction('rw', [db.deposits, db.foreignDeposits, db.creditCards, db.loans, db.customAssets, db.stocks], async () => {
       await db.deposits.clear()
       await db.foreignDeposits.clear()
       await db.creditCards.clear()
       await db.loans.clear()
       await db.customAssets.clear()
+      await db.stocks.clear()
 
       if (data.deposits) await db.deposits.bulkAdd(data.deposits)
       if (data.foreignDeposits) await db.foreignDeposits.bulkAdd(data.foreignDeposits)
       if (data.creditCards) await db.creditCards.bulkAdd(data.creditCards)
       if (data.loans) await db.loans.bulkAdd(data.loans)
       if (data.customAssets) await db.customAssets.bulkAdd(data.customAssets)
+      if (data.stocks) await db.stocks.bulkAdd(data.stocks)
     })
     await loadAll()
   }
@@ -236,10 +297,13 @@ export const useAssetStore = defineStore('assets', () => {
     creditCards,
     loans,
     customAssets,
+    stocks,
+    stockPrices,
     loading,
     totalDeposits,
     totalForeignTWD,
     totalCustomAssets,
+    totalStocks,
     totalAssets,
     totalCreditCardDebt,
     totalLoanBalance,
@@ -262,6 +326,10 @@ export const useAssetStore = defineStore('assets', () => {
     addCustomAsset,
     updateCustomAsset,
     deleteCustomAsset,
+    addStock,
+    updateStock,
+    deleteStock,
+    refreshStockPrices,
     exportBackup,
     importBackup,
   }

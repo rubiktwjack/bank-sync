@@ -23,6 +23,11 @@ const chartData = computed(() => {
     colors.push('#8B5CF6')
     labels.push('外幣存款')
   }
+  if (store.totalStocks > 0) {
+    segments.push(store.totalStocks)
+    colors.push('#06B6D4')
+    labels.push('股票')
+  }
   if (store.totalCustomAssets > 0) {
     segments.push(store.totalCustomAssets)
     colors.push('#F59E0B')

@@ -7,6 +7,7 @@ import type {
   CustomAsset,
   ExchangeRate,
   NetWorthSnapshot,
+  StockHolding,
 } from '../types'
 
 export class BankSyncDB extends Dexie {
@@ -16,6 +17,7 @@ export class BankSyncDB extends Dexie {
   loans!: Table<Loan>
   customAssets!: Table<CustomAsset>
   exchangeRates!: Table<ExchangeRate>
+  stocks!: Table<StockHolding>
   snapshots!: Table<NetWorthSnapshot>
 
   constructor() {
@@ -39,6 +41,18 @@ export class BankSyncDB extends Dexie {
       customAssets: 'id, category, subCategory',
       exchangeRates: 'currency',
       snapshots: 'id, date',
+    })
+
+    // v3: 加入股票持倉表
+    this.version(3).stores({
+      deposits: 'id, bankName, accountType, source',
+      foreignDeposits: 'id, bankName, currency, source',
+      creditCards: 'id, bankName, dueDate, source',
+      loans: 'id, bankName, loanType, source',
+      customAssets: 'id, category, subCategory',
+      exchangeRates: 'currency',
+      snapshots: 'id, date',
+      stocks: 'id, ticker',
     })
   }
 }

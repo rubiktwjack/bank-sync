@@ -9,6 +9,13 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     host: true,
+    proxy: {
+      '/yahoo-finance': {
+        target: 'https://query2.finance.yahoo.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/yahoo-finance/, ''),
+      },
+    },
   },
   plugins: [
     vue(),

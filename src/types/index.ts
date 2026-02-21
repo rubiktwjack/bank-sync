@@ -73,4 +73,13 @@ export interface NetWorthSnapshot {
   netWorth: number
 }
 
+export interface StockHolding {
+  id: string
+  ticker: string        // 2330.TW, AAPL
+  name?: string         // 台積電, Apple
+  shares: number
+  avgCost?: number      // 選填：平均成本
+  lastUpdated: Date
+}
+
 export type AssetType = DepositAccount | ForeignDeposit | CreditCard | Loan | CustomAsset

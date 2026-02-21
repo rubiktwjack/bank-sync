@@ -3,12 +3,13 @@ import { ref, computed } from 'vue'
 import TopBar from '../components/layout/TopBar.vue'
 import { useAssetStore } from '../stores/assets'
 import { formatCurrency, maskAccountNumber, timeAgo } from '../utils/format'
-import { Plus, Landmark, Globe, Bitcoin, Package, Trash2, ChevronDown, AlertTriangle } from 'lucide-vue-next'
+import { stockMarketValueTWD } from '../services/stockPrice'
+import { Plus, Landmark, Globe, Bitcoin, Package, TrendingUp, Trash2, Pencil, ChevronDown, AlertTriangle, Loader2 } from 'lucide-vue-next'
 import { bankErrors } from '../composables/useSync'
 
 const store = useAssetStore()
 
-type TabType = 'deposit' | 'foreign' | 'crypto' | 'custom'
+type TabType = 'deposit' | 'foreign' | 'crypto' | 'stock' | 'custom'
 const activeTab = ref<TabType>('deposit')
 
 // 按銀行分組台幣存款
@@ -71,6 +72,7 @@ function toggle(bankName: string) {
 
 // Add custom asset form
 const showCustomForm = ref(false)
+const editingCustomId = ref<string | null>(null)
 const customForm = ref({
   name: '',
   subCategory: '',
@@ -79,18 +81,121 @@ const customForm = ref({
   notes: '',
 })
 
+function openEditCustom(a: { id: string; name: string; subCategory: string; value: number; currency: string; notes?: string }) {
+  editingCustomId.value = a.id
+  customForm.value = {
+    name: a.name,
+    subCategory: a.subCategory,
+    value: a.value,
+    currency: a.currency,
+    notes: a.notes || '',
+  }
+  showCustomForm.value = true
+}
+
+function openAddCustom() {
+  editingCustomId.value = null
+  customForm.value = { name: '', subCategory: '', value: 0, currency: 'TWD', notes: '' }
+  showCustomForm.value = true
+}
+
 async function saveCustomAsset() {
   if (!customForm.value.name) return
-  await store.addCustomAsset({
-    name: customForm.value.name,
-    category: 'asset',
-    subCategory: customForm.value.subCategory,
-    value: customForm.value.value,
-    currency: customForm.value.currency,
-    notes: customForm.value.notes || undefined,
-  })
+  if (editingCustomId.value) {
+    await store.updateCustomAsset(editingCustomId.value, {
+      name: customForm.value.name,
+      subCategory: customForm.value.subCategory,
+      value: customForm.value.value,
+      currency: customForm.value.currency,
+      notes: customForm.value.notes || undefined,
+    })
+  } else {
+    await store.addCustomAsset({
+      name: customForm.value.name,
+      category: 'asset',
+      subCategory: customForm.value.subCategory,
+      value: customForm.value.value,
+      currency: customForm.value.currency,
+      notes: customForm.value.notes || undefined,
+    })
+  }
   customForm.value = { name: '', subCategory: '', value: 0, currency: 'TWD', notes: '' }
+  editingCustomId.value = null
   showCustomForm.value = false
+}
+
+// Stock form
+const showStockForm = ref(false)
+const editingStockId = ref<string | null>(null)
+const stockForm = ref({
+  market: 'tw' as 'tw' | 'us',
+  ticker: '',
+  shares: 0,
+  avgCost: undefined as number | undefined,
+})
+const stockFormLoading = ref(false)
+const stockFormError = ref('')
+
+function openAddStock() {
+  editingStockId.value = null
+  stockForm.value = { market: 'tw', ticker: '', shares: 0, avgCost: undefined }
+  stockFormError.value = ''
+  showStockForm.value = true
+}
+
+function openEditStock(s: { id: string; ticker: string; shares: number; avgCost?: number }) {
+  editingStockId.value = s.id
+  const isTW = s.ticker.endsWith('.TW') || s.ticker.endsWith('.TWO')
+  stockForm.value = {
+    market: isTW ? 'tw' : 'us',
+    ticker: isTW ? s.ticker.replace(/\.(TW|TWO)$/, '') : s.ticker,
+    shares: s.shares,
+    avgCost: s.avgCost,
+  }
+  stockFormError.value = ''
+  showStockForm.value = true
+}
+
+function getFullTicker(): string {
+  const t = stockForm.value.ticker.trim().toUpperCase()
+  if (stockForm.value.market === 'tw') return `${t}.TW`
+  return t
+}
+
+async function saveStock() {
+  const ticker = getFullTicker()
+  if (!ticker || !stockForm.value.shares) return
+  stockFormLoading.value = true
+  stockFormError.value = ''
+  try {
+    // 驗證代碼有效
+    const { fetchStockPrices } = await import('../services/stockPrice')
+    const prices = await fetchStockPrices([ticker])
+    if (!prices[ticker]) {
+      stockFormError.value = '找不到此股票代碼，請確認後重試'
+      return
+    }
+    if (editingStockId.value) {
+      await store.updateStock(editingStockId.value, {
+        ticker,
+        shares: stockForm.value.shares,
+        avgCost: stockForm.value.avgCost,
+        name: prices[ticker].name,
+      })
+    } else {
+      await store.addStock({
+        ticker,
+        shares: stockForm.value.shares,
+        avgCost: stockForm.value.avgCost,
+        name: prices[ticker].name,
+      })
+    }
+    showStockForm.value = false
+  } catch {
+    stockFormError.value = '股價查詢失敗，請稍後重試'
+  } finally {
+    stockFormLoading.value = false
+  }
 }
 </script>
 
@@ -98,7 +203,10 @@ async function saveCustomAsset() {
   <div>
     <TopBar title="資產">
       <template #actions>
-        <button v-if="activeTab === 'custom'" @click="showCustomForm = true" class="w-9 h-9 flex items-center justify-center rounded-full bg-primary/10 text-primary">
+        <button v-if="activeTab === 'custom'" @click="openAddCustom" class="w-9 h-9 flex items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Plus :size="20" />
+        </button>
+        <button v-if="activeTab === 'stock'" @click="openAddStock" class="w-9 h-9 flex items-center justify-center rounded-full bg-primary/10 text-primary">
           <Plus :size="20" />
         </button>
       </template>
@@ -117,6 +225,7 @@ async function saveCustomAsset() {
           { key: 'deposit', label: '台幣存款', icon: Landmark },
           { key: 'foreign', label: '外幣存款', icon: Globe },
           { key: 'crypto', label: '加密貨幣', icon: Bitcoin },
+          { key: 'stock', label: '股票', icon: TrendingUp },
           { key: 'custom', label: '自訂', icon: Package },
         ] as const)"
         :key="tab.key"
@@ -290,6 +399,47 @@ async function saveCustomAsset() {
       </div>
     </div>
 
+    <!-- Stock list -->
+    <div v-if="activeTab === 'stock'" class="px-4 space-y-3">
+      <div
+        v-for="s in store.stocks"
+        :key="s.id"
+        class="bg-surface rounded-2xl p-4"
+      >
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="font-semibold">
+              <span class="text-primary">{{ s.ticker }}</span>
+              <span v-if="s.name" class="text-text-secondary text-sm ml-1.5">{{ s.name }}</span>
+            </p>
+            <p class="text-xs text-text-secondary mt-0.5">
+              {{ s.shares }} 股
+              <template v-if="store.stockPrices[s.ticker]">
+                · 現價 {{ formatCurrency(store.stockPrices[s.ticker]?.price ?? 0, store.stockPrices[s.ticker]?.currency ?? 'TWD') }}
+              </template>
+            </p>
+          </div>
+          <div class="flex gap-1">
+            <button @click="openEditStock(s)" class="text-text-secondary p-1">
+              <Pencil :size="16" />
+            </button>
+            <button @click="store.deleteStock(s.id)" class="text-text-secondary p-1">
+              <Trash2 :size="16" />
+            </button>
+          </div>
+        </div>
+        <p class="text-xl font-bold text-asset mt-2">
+          ≈ {{ formatCurrency(stockMarketValueTWD(s.shares, store.stockPrices[s.ticker])) }}
+        </p>
+        <p v-if="s.avgCost" class="text-xs text-text-secondary mt-1">
+          成本 {{ formatCurrency(s.avgCost * s.shares) }}
+        </p>
+      </div>
+      <div v-if="store.stocks.length === 0" class="text-center py-12 text-text-secondary text-sm">
+        點右上角 + 新增股票持倉
+      </div>
+    </div>
+
     <!-- Custom asset list -->
     <div v-if="activeTab === 'custom'" class="px-4 space-y-3">
       <div
@@ -302,9 +452,14 @@ async function saveCustomAsset() {
             <p class="font-semibold">{{ a.name }}</p>
             <p v-if="a.subCategory" class="text-sm text-text-secondary">{{ a.subCategory }}</p>
           </div>
-          <button @click="store.deleteCustomAsset(a.id)" class="text-text-secondary p-1">
-            <Trash2 :size="16" />
-          </button>
+          <div class="flex gap-1">
+            <button @click="openEditCustom(a)" class="text-text-secondary p-1">
+              <Pencil :size="16" />
+            </button>
+            <button @click="store.deleteCustomAsset(a.id)" class="text-text-secondary p-1">
+              <Trash2 :size="16" />
+            </button>
+          </div>
         </div>
         <p class="text-xl font-bold text-asset mt-2">{{ formatCurrency(a.value, a.currency) }}</p>
         <p v-if="a.notes" class="text-xs text-text-secondary mt-1">{{ a.notes }}</p>
@@ -314,11 +469,11 @@ async function saveCustomAsset() {
       </div>
     </div>
 
-    <!-- Add Custom Asset Modal -->
+    <!-- Add/Edit Custom Asset Modal -->
     <Teleport to="body">
       <div v-if="showCustomForm" class="fixed inset-0 z-[60] flex items-end justify-center bg-black/40" @click.self="showCustomForm = false">
         <div class="bg-surface w-full max-w-lg rounded-t-2xl p-5 pb-safe animate-slide-up">
-          <h2 class="text-lg font-bold mb-4">新增自訂資產</h2>
+          <h2 class="text-lg font-bold mb-4">{{ editingCustomId ? '編輯' : '新增' }}自訂資產</h2>
           <div class="space-y-3">
             <div>
               <label class="text-sm text-text-secondary">名稱</label>
@@ -340,6 +495,57 @@ async function saveCustomAsset() {
           <div class="flex gap-3 mt-5">
             <button @click="showCustomForm = false" class="flex-1 py-2.5 rounded-xl border border-border text-sm">取消</button>
             <button @click="saveCustomAsset" class="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold">儲存</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Add/Edit Stock Modal -->
+    <Teleport to="body">
+      <div v-if="showStockForm" class="fixed inset-0 z-[60] flex items-end justify-center bg-black/40" @click.self="showStockForm = false">
+        <div class="bg-surface w-full max-w-lg rounded-t-2xl p-5 pb-safe animate-slide-up">
+          <h2 class="text-lg font-bold mb-4">{{ editingStockId ? '編輯' : '新增' }}股票持倉</h2>
+          <div class="space-y-3">
+            <div>
+              <label class="text-sm text-text-secondary">市場</label>
+              <div class="flex gap-2 mt-1">
+                <button
+                  @click="stockForm.market = 'tw'"
+                  class="flex-1 py-2 rounded-xl text-sm font-medium transition-colors"
+                  :class="stockForm.market === 'tw' ? 'bg-primary text-white' : 'bg-background border border-border text-text-secondary'"
+                >台股</button>
+                <button
+                  @click="stockForm.market = 'us'"
+                  class="flex-1 py-2 rounded-xl text-sm font-medium transition-colors"
+                  :class="stockForm.market === 'us' ? 'bg-primary text-white' : 'bg-background border border-border text-text-secondary'"
+                >美股</button>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-text-secondary">股票代碼</label>
+              <input
+                v-model="stockForm.ticker"
+                type="text"
+                :placeholder="stockForm.market === 'tw' ? '例：2330' : '例：AAPL'"
+                class="w-full mt-1 px-3 py-2.5 rounded-xl border border-border bg-background text-sm uppercase"
+              />
+            </div>
+            <div>
+              <label class="text-sm text-text-secondary">股數</label>
+              <input v-model.number="stockForm.shares" type="number" placeholder="0" class="w-full mt-1 px-3 py-2.5 rounded-xl border border-border bg-background text-sm" />
+            </div>
+            <div>
+              <label class="text-sm text-text-secondary">平均成本 (選填)</label>
+              <input v-model.number="stockForm.avgCost" type="number" placeholder="每股成本" class="w-full mt-1 px-3 py-2.5 rounded-xl border border-border bg-background text-sm" />
+            </div>
+            <p v-if="stockFormError" class="text-sm text-liability">{{ stockFormError }}</p>
+          </div>
+          <div class="flex gap-3 mt-5">
+            <button @click="showStockForm = false" class="flex-1 py-2.5 rounded-xl border border-border text-sm">取消</button>
+            <button @click="saveStock" :disabled="stockFormLoading" class="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold flex items-center justify-center gap-1.5">
+              <Loader2 v-if="stockFormLoading" :size="16" class="animate-spin" />
+              {{ stockFormLoading ? '查詢中...' : '儲存' }}
+            </button>
           </div>
         </div>
       </div>
