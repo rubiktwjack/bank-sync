@@ -114,9 +114,9 @@ async function saveCustomAsset() {
     <div class="flex px-4 gap-2 mb-4">
       <button
         v-for="tab in ([
-          { key: 'deposit', label: '台幣存款', icon: Landmark },
-          { key: 'foreign', label: '外幣存款', icon: Globe },
-          { key: 'crypto', label: '加密貨幣', icon: Bitcoin },
+          { key: 'deposit', label: '台幣', icon: Landmark },
+          { key: 'foreign', label: '外幣', icon: Globe },
+          { key: 'crypto', label: '加密', icon: Bitcoin },
           { key: 'custom', label: '自訂', icon: Package },
         ] as const)"
         :key="tab.key"
