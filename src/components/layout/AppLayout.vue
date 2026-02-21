@@ -3,8 +3,8 @@ import BottomNav from './BottomNav.vue'
 </script>
 
 <template>
-  <div class="flex flex-col h-full max-w-lg mx-auto">
-    <main class="flex-1 overflow-y-scroll">
+  <div class="min-h-full flex flex-col max-w-lg mx-auto">
+    <main class="flex-1 pb-20">
       <router-view />
     </main>
     <BottomNav />
