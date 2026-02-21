@@ -66,6 +66,8 @@ export const syncError = ref<string | null>(null)
 export const syncing = ref(false)
 export const triggeringScrape = ref(false)
 export const scrapeStatus = ref<string | null>(null)
+/** 交易所/銀行同步失敗的錯誤訊息，key = bankName */
+export const bankErrors = ref<Record<string, string>>({})
 
 /**
  * 從 /data/latest.json.enc 載入加密的爬蟲資料，解密後寫入 IndexedDB
@@ -77,14 +79,22 @@ export async function loadSyncData(): Promise<void> {
 
   try {
     // 優先嘗試加密版本，fallback 到明文（本地開發用）
-    let data: SyncResult
+    let data: SyncResult = undefined!
 
+    let decrypted = false
     const encRes = await fetch('./data/latest.json.enc')
     if (encRes.ok) {
-      const encText = await encRes.text()
-      const plaintext = await decrypt(encText)
-      data = JSON.parse(plaintext)
-    } else {
+      try {
+        const encText = await encRes.text()
+        const plaintext = await decrypt(encText)
+        data = JSON.parse(plaintext)
+        decrypted = true
+      } catch {
+        // 解密失敗（如沒有金鑰），fallback 到明文
+      }
+    }
+
+    if (!decrypted) {
       const res = await fetch('./data/latest.json')
       if (!res.ok) {
         if (res.status === 404) return
@@ -94,6 +104,15 @@ export async function loadSyncData(): Promise<void> {
     }
 
     lastSyncedAt.value = data.syncedAt
+
+    // 記錄失敗的銀行/交易所
+    const errors: Record<string, string> = {}
+    for (const bank of data.banks) {
+      if (!bank.success && bank.error) {
+        errors[bank.bankName] = bank.error
+      }
+    }
+    bankErrors.value = errors
 
     // 取得即時匯率
     const rates = await loadRates()

@@ -2,6 +2,8 @@ import 'dotenv/config'
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { createScraper, getAvailableBanks } from './banks/index.js'
+import { createExchange, getAvailableExchanges } from './exchanges/index.js'
+import type { ExchangeCredentials } from './exchanges/base-exchange.js'
 import { retry } from './utils/retry.js'
 import { logger } from './utils/logger.js'
 import { encrypt } from './utils/crypto.js'
@@ -60,6 +62,22 @@ function loadBankConfigs(): BankConfig[] {
   return configs
 }
 
+function loadExchangeConfigs(): { exchangeId: string; credentials: ExchangeCredentials }[] {
+  const configs: { exchangeId: string; credentials: ExchangeCredentials }[] = []
+  for (const exchangeId of getAvailableExchanges()) {
+    const prefix = `EXCHANGE_${exchangeId.toUpperCase()}_`
+    if (process.env[`${prefix}ENABLED`] !== 'true') continue
+    const apiKey = process.env[`${prefix}API_KEY`] ?? ''
+    const secretKey = process.env[`${prefix}SECRET_KEY`] ?? ''
+    if (!apiKey || !secretKey) {
+      logger.warn(`${exchangeId} 已啟用但缺少 API Key，跳過`)
+      continue
+    }
+    configs.push({ exchangeId, credentials: { apiKey, secretKey } })
+  }
+  return configs
+}
+
 function loadConfig(): ScraperConfig {
   const isDryRun = process.argv.includes('--dry-run')
   const banks = loadBankConfigs()
@@ -100,6 +118,7 @@ async function main() {
     banks: [],
   }
 
+  // 銀行爬蟲
   for (const bankConfig of config.banks) {
     logger.info(`\n--- 開始爬取: ${bankConfig.bankId} ---`)
     const scraper = createScraper(bankConfig.bankId)
@@ -114,6 +133,15 @@ async function main() {
     )
 
     result.banks.push(bankResult)
+  }
+
+  // 加密貨幣交易所
+  const exchangeConfigs = loadExchangeConfigs()
+  for (const { exchangeId, credentials } of exchangeConfigs) {
+    logger.info(`\n--- 開始查詢: ${exchangeId} ---`)
+    const exchange = createExchange(exchangeId)
+    const exchangeResult = await exchange.run(credentials)
+    result.banks.push(exchangeResult)
   }
 
   // 寫入結果

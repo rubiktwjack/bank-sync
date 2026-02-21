@@ -3,11 +3,12 @@ import { ref, computed } from 'vue'
 import TopBar from '../components/layout/TopBar.vue'
 import { useAssetStore } from '../stores/assets'
 import { formatCurrency, maskAccountNumber, timeAgo } from '../utils/format'
-import { Plus, Landmark, Globe, Package, Trash2, ChevronDown } from 'lucide-vue-next'
+import { Plus, Landmark, Globe, Bitcoin, Package, Trash2, ChevronDown, AlertTriangle } from 'lucide-vue-next'
+import { bankErrors } from '../composables/useSync'
 
 const store = useAssetStore()
 
-type TabType = 'deposit' | 'foreign' | 'custom'
+type TabType = 'deposit' | 'foreign' | 'crypto' | 'custom'
 const activeTab = ref<TabType>('deposit')
 
 // 按銀行分組台幣存款
@@ -24,16 +25,36 @@ const depositsByBank = computed(() => {
   }))
 })
 
-// 按銀行分組外幣存款
+// 交易所名單（排除加密貨幣，只顯示銀行外幣）
+const EXCHANGES = ['BingX', 'Binance', 'Bybit']
+
+// 按銀行分組外幣存款（排除交易所）
 const foreignByBank = computed(() => {
   const banks = new Map<string, typeof store.foreignDeposits>()
   for (const f of store.foreignDeposits) {
+    if (EXCHANGES.includes(f.bankName)) continue
     if (!banks.has(f.bankName)) banks.set(f.bankName, [])
     banks.get(f.bankName)!.push(f)
   }
   return Array.from(banks.entries()).map(([bankName, items]) => ({
     bankName,
     items,
+    totalTWD: items.reduce((s, f) => s + (f.twdEquivalent || 0), 0),
+  }))
+})
+
+// 按交易所分組加密貨幣（即使沒有資產也顯示已連接的交易所）
+const cryptoByExchange = computed(() => {
+  const exchanges = new Map<string, typeof store.foreignDeposits>()
+  // 先把所有已知交易所初始化為空陣列
+  for (const name of EXCHANGES) exchanges.set(name, [])
+  for (const f of store.foreignDeposits) {
+    if (!EXCHANGES.includes(f.bankName)) continue
+    exchanges.get(f.bankName)!.push(f)
+  }
+  return Array.from(exchanges.entries()).map(([name, items]) => ({
+    bankName: name,
+    items: items.sort((a, b) => (b.twdEquivalent || 0) - (a.twdEquivalent || 0)),
     totalTWD: items.reduce((s, f) => s + (f.twdEquivalent || 0), 0),
   }))
 })
@@ -95,6 +116,7 @@ async function saveCustomAsset() {
         v-for="tab in ([
           { key: 'deposit', label: '台幣存款', icon: Landmark },
           { key: 'foreign', label: '外幣存款', icon: Globe },
+          { key: 'crypto', label: '加密貨幣', icon: Bitcoin },
           { key: 'custom', label: '自訂', icon: Package },
         ] as const)"
         :key="tab.key"
@@ -198,7 +220,7 @@ async function saveCustomAsset() {
               <div>
                 <p class="text-sm font-medium">
                   <span class="text-primary">{{ f.currency }}</span>
-                  {{ maskAccountNumber(f.accountNumber) }}
+                  <span v-if="f.accountNumber">{{ maskAccountNumber(f.accountNumber) }}</span>
                 </p>
                 <p class="text-xs text-text-secondary mt-0.5">
                   ≈ {{ formatCurrency(f.twdEquivalent) }} · 匯率 {{ f.exchangeRate?.toFixed(2) }}
@@ -209,8 +231,62 @@ async function saveCustomAsset() {
           </div>
         </div>
       </div>
-      <div v-if="store.foreignDeposits.length === 0" class="text-center py-12 text-text-secondary text-sm">
+      <div v-if="foreignByBank.length === 0" class="text-center py-12 text-text-secondary text-sm">
         資料自動從銀行同步，若無資料請至「更多」執行立即同步
+      </div>
+    </div>
+
+    <!-- Crypto list (grouped by exchange) -->
+    <div v-if="activeTab === 'crypto'" class="px-4 space-y-3">
+      <div
+        v-for="group in cryptoByExchange"
+        :key="group.bankName"
+        class="bg-surface rounded-2xl overflow-hidden"
+      >
+        <button
+          @click="toggle('c-' + group.bankName)"
+          class="flex items-center justify-between w-full px-4 py-3 cursor-pointer"
+        >
+          <div class="flex items-center gap-2">
+            <Bitcoin :size="16" class="text-primary" />
+            <span class="font-semibold text-sm">{{ group.bankName }}</span>
+            <span class="text-xs text-text-secondary">{{ group.items.length }} 幣種</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold text-asset">≈ {{ formatCurrency(group.totalTWD) }}</span>
+            <ChevronDown
+              :size="16"
+              class="text-text-secondary transition-transform duration-200"
+              :class="{ 'rotate-180': expanded.has('c-' + group.bankName) }"
+            />
+          </div>
+        </button>
+        <div v-show="expanded.has('c-' + group.bankName)" class="border-t border-border">
+          <!-- API 錯誤提醒 -->
+          <div v-if="bankErrors[group.bankName]" class="px-4 py-3 bg-liability/10 flex items-start gap-2">
+            <AlertTriangle :size="16" class="text-liability shrink-0 mt-0.5" />
+            <p class="text-xs text-liability">API 金鑰可能已過期，請更新後重新同步</p>
+          </div>
+          <!-- 無資產提示 -->
+          <div v-else-if="group.items.length === 0" class="px-4 py-3 text-xs text-text-secondary">
+            目前無持倉（或資產價值低於 NT$1）
+          </div>
+          <div
+            v-for="f in group.items"
+            :key="f.id"
+            class="px-4 py-3 border-b border-border last:border-b-0"
+          >
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-semibold text-primary">{{ f.currency }}</p>
+                <p class="text-xs text-text-secondary mt-0.5">
+                  ≈ {{ formatCurrency(f.twdEquivalent) }} · 單價 {{ formatCurrency(f.exchangeRate || 0) }}
+                </p>
+              </div>
+              <p class="text-base font-bold text-asset">{{ f.balance >= 1 ? f.balance.toFixed(2) : f.balance.toFixed(6) }}</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
