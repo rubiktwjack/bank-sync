@@ -114,10 +114,6 @@ async function main() {
   const outPath = resolve(__dirname, '../../data/stock-prices.json')
   writeFileSync(outPath, JSON.stringify(all))
   console.log(`Written ${Object.keys(all).length} stocks to ${outPath}`)
-
-  // 也複製到 public/data/ 供本地測試
-  const publicPath = resolve(__dirname, '../../public/data/stock-prices.json')
-  writeFileSync(publicPath, JSON.stringify(all))
 }
 
 main().catch((e) => {
