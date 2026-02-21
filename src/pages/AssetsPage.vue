@@ -130,7 +130,7 @@ async function saveCustomAsset() {
     </div>
 
     <!-- Deposit list (grouped by bank) -->
-    <div v-if="activeTab === 'deposit'" class="px-4 space-y-3">
+    <div v-if="activeTab === 'deposit'" class="px-4 space-y-3 flex-1">
       <div
         v-for="group in depositsByBank"
         :key="group.bankName"
@@ -184,7 +184,7 @@ async function saveCustomAsset() {
     </div>
 
     <!-- Foreign deposit list (grouped by bank) -->
-    <div v-if="activeTab === 'foreign'" class="px-4 space-y-3">
+    <div v-if="activeTab === 'foreign'" class="px-4 space-y-3 flex-1">
       <div
         v-for="group in foreignByBank"
         :key="group.bankName"
@@ -237,7 +237,7 @@ async function saveCustomAsset() {
     </div>
 
     <!-- Crypto list (grouped by exchange) -->
-    <div v-if="activeTab === 'crypto'" class="px-4 space-y-3">
+    <div v-if="activeTab === 'crypto'" class="px-4 space-y-3 flex-1">
       <div
         v-for="group in cryptoByExchange"
         :key="group.bankName"
@@ -291,7 +291,7 @@ async function saveCustomAsset() {
     </div>
 
     <!-- Custom asset list -->
-    <div v-if="activeTab === 'custom'" class="px-4 space-y-3">
+    <div v-if="activeTab === 'custom'" class="px-4 space-y-3 flex-1">
       <div
         v-for="a in store.customAssets.filter(a => a.category === 'asset')"
         :key="a.id"

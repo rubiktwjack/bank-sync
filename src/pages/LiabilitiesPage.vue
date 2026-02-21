@@ -68,7 +68,7 @@ async function saveCustomLiability() {
     </div>
 
     <!-- Credit Card list -->
-    <div v-if="activeTab === 'credit'" class="px-4 space-y-3">
+    <div v-if="activeTab === 'credit'" class="px-4 space-y-3 flex-1">
       <div
         v-for="c in store.creditCards"
         :key="c.id"
@@ -95,7 +95,7 @@ async function saveCustomLiability() {
     </div>
 
     <!-- Custom liability list -->
-    <div v-if="activeTab === 'custom'" class="px-4 space-y-3">
+    <div v-if="activeTab === 'custom'" class="px-4 space-y-3 flex-1">
       <div
         v-for="a in store.customAssets.filter(a => a.category === 'liability')"
         :key="a.id"
