@@ -258,7 +258,7 @@ export async function triggerSync(): Promise<void> {
       {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ref: 'claude/add-superpower-kit-fIfQI' }),
+        body: JSON.stringify({ ref: 'main' }),
       },
     )
 
