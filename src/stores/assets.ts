@@ -27,12 +27,24 @@ export const useAssetStore = defineStore('assets', () => {
     deposits.value.reduce((sum, d) => sum + d.balance, 0)
   )
 
+  const EXCHANGES = ['BingX', 'Binance', 'Bybit']
+
   const totalForeignTWD = computed(() =>
-    foreignDeposits.value.reduce((sum, f) => {
-      // 優先用即時匯率，fallback 到存入時的 twdEquivalent
-      const live = toTWD(f.balance, f.currency)
-      return sum + (live > 0 ? live : f.twdEquivalent)
-    }, 0)
+    foreignDeposits.value
+      .filter((f) => !EXCHANGES.includes(f.bankName))
+      .reduce((sum, f) => {
+        const live = toTWD(f.balance, f.currency)
+        return sum + (live > 0 ? live : f.twdEquivalent)
+      }, 0)
+  )
+
+  const totalCryptoTWD = computed(() =>
+    foreignDeposits.value
+      .filter((f) => EXCHANGES.includes(f.bankName))
+      .reduce((sum, f) => {
+        const live = toTWD(f.balance, f.currency)
+        return sum + (live > 0 ? live : f.twdEquivalent)
+      }, 0)
   )
 
   const totalCustomAssets = computed(() =>
@@ -49,7 +61,7 @@ export const useAssetStore = defineStore('assets', () => {
   )
 
   const totalAssets = computed(() =>
-    totalDeposits.value + totalForeignTWD.value + totalCustomAssets.value + totalStocks.value
+    totalDeposits.value + totalForeignTWD.value + totalCryptoTWD.value + totalCustomAssets.value + totalStocks.value
   )
 
   const totalCreditCardDebt = computed(() =>
@@ -302,6 +314,7 @@ export const useAssetStore = defineStore('assets', () => {
     loading,
     totalDeposits,
     totalForeignTWD,
+    totalCryptoTWD,
     totalCustomAssets,
     totalStocks,
     totalAssets,

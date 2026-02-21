@@ -23,6 +23,11 @@ const chartData = computed(() => {
     colors.push('#8B5CF6')
     labels.push('外幣存款')
   }
+  if (store.totalCryptoTWD > 0) {
+    segments.push(store.totalCryptoTWD)
+    colors.push('#F97316')
+    labels.push('加密貨幣')
+  }
   if (store.totalStocks > 0) {
     segments.push(store.totalStocks)
     colors.push('#06B6D4')
