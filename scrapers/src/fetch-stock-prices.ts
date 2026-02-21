@@ -5,7 +5,7 @@
  * 台股：TWSE OpenAPI (上市) + TPEX (上櫃)
  * 美股：Yahoo Finance chart API（server-side 無 CORS 問題）
  */
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -17,15 +17,15 @@ interface StockQuote {
   name: string
 }
 
-// 常用美股清單
-const US_TICKERS = [
-  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'TSM',
-  'BRK-B', 'JPM', 'V', 'MA', 'UNH', 'XOM', 'JNJ', 'PG', 'HD',
-  'AVGO', 'COST', 'ABBV', 'KO', 'PEP', 'MRK', 'LLY', 'AMD',
-  'CRM', 'NFLX', 'ADBE', 'ORCL', 'INTC', 'QCOM', 'DIS', 'NKE',
-  'PYPL', 'BABA', 'PLTR', 'SOFI', 'COIN', 'MSTR', 'SPY', 'QQQ',
-  'VOO', 'VTI', 'ARKK',
-]
+// 從 watchlist 讀取美股清單
+function loadWatchlist(): string[] {
+  try {
+    const path = resolve(__dirname, '../../data/stock-watchlist.json')
+    return JSON.parse(readFileSync(path, 'utf-8'))
+  } catch {
+    return []
+  }
+}
 
 async function fetchTWSE(): Promise<Record<string, StockQuote>> {
   const result: Record<string, StockQuote> = {}
@@ -74,8 +74,11 @@ async function fetchTWSE(): Promise<Record<string, StockQuote>> {
 async function fetchUSStocks(): Promise<Record<string, StockQuote>> {
   const result: Record<string, StockQuote> = {}
 
+  const tickers = loadWatchlist()
+  console.log(`Watchlist: ${tickers.length} tickers`)
+
   await Promise.allSettled(
-    US_TICKERS.map(async (ticker) => {
+    tickers.map(async (ticker) => {
       try {
         const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`
         const res = await fetch(url, {

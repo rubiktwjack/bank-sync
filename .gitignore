@@ -22,6 +22,7 @@ data/latest.json
 # 加密版 + 股價由 GitHub Actions 產生並 commit
 !data/latest.json.enc
 !data/stock-prices.json
+!data/stock-watchlist.json
 
 # Claude Code 本地設定
 .claude/
