@@ -1,4 +1,4 @@
-import { createCipheriv, randomBytes, pbkdf2Sync } from 'node:crypto'
+import { createCipheriv, createDecipheriv, randomBytes, pbkdf2Sync } from 'node:crypto'
 
 /**
  * AES-256-GCM 加密（密碼版）
@@ -29,4 +29,23 @@ export function encrypt(plaintext: string): string {
     data: encrypted.toString('base64'),
     tag: tag.toString('base64'),
   })
+}
+
+export function decrypt(ciphertext: string): string {
+  const password = process.env.SYNC_PASSWORD
+  if (!password) {
+    throw new Error('SYNC_PASSWORD 環境變數未設定')
+  }
+
+  const { salt, iv, data, tag } = JSON.parse(ciphertext)
+  const key = pbkdf2Sync(password, Buffer.from(salt, 'base64'), 100000, 32, 'sha256')
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64'))
+  decipher.setAuthTag(Buffer.from(tag, 'base64'))
+
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(data, 'base64')),
+    decipher.final(),
+  ])
+
+  return decrypted.toString('utf8')
 }

@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import TopBar from '../components/layout/TopBar.vue'
 import { useAssetStore } from '../stores/assets'
-import { triggerSync, triggeringScrape, scrapeStatus, lastSyncedAt } from '../composables/useSync'
+import { triggerSync, triggeringScrape, scrapeStatus, lastSyncedAt, syncingTargets, SYNC_TARGETS } from '../composables/useSync'
 import { Database, Info, FileDown, FileUp, RefreshCw } from 'lucide-vue-next'
 
 const store = useAssetStore()
@@ -59,14 +59,27 @@ async function clearAllData() {
       <!-- 同步 -->
       <div class="bg-surface rounded-2xl overflow-hidden">
         <h3 class="text-xs font-semibold text-text-secondary px-4 pt-4 pb-2">銀行同步</h3>
-        <button @click="triggerSync" :disabled="triggeringScrape" class="flex items-center gap-3 w-full px-4 py-3 text-left active:bg-background transition-colors disabled:opacity-50">
+        <!-- 全部同步 -->
+        <button @click="triggerSync()" :disabled="triggeringScrape" class="flex items-center gap-3 w-full px-4 py-3 text-left active:bg-background transition-colors disabled:opacity-50">
           <div class="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
             <RefreshCw :size="18" class="text-primary" :class="{ 'animate-spin': triggeringScrape }" />
           </div>
           <div class="flex-1">
-            <p class="text-sm font-medium">立即同步</p>
-            <p class="text-xs text-text-secondary">{{ scrapeStatus ?? (lastSyncedAt ? `上次同步: ${new Date(lastSyncedAt).toLocaleString('zh-TW')}` : '觸發 GitHub Actions 爬蟲') }}</p>
+            <p class="text-sm font-medium">全部同步</p>
+            <p class="text-xs text-text-secondary">{{ scrapeStatus ?? (lastSyncedAt ? `上次: ${new Date(lastSyncedAt).toLocaleString('zh-TW')}` : '觸發 GitHub Actions 爬蟲') }}</p>
           </div>
+        </button>
+        <!-- 個別同步 -->
+        <button
+          v-for="target in SYNC_TARGETS"
+          :key="target.id"
+          @click="triggerSync([target.id])"
+          :disabled="triggeringScrape || syncingTargets.has(target.id)"
+          class="flex items-center gap-3 w-full px-4 py-2.5 text-left active:bg-background transition-colors disabled:opacity-50"
+        >
+          <span class="text-base w-6 text-center">{{ target.icon }}</span>
+          <p class="text-sm flex-1">{{ target.name }}</p>
+          <RefreshCw :size="14" class="text-text-secondary" :class="{ 'animate-spin': syncingTargets.has(target.id) }" />
         </button>
       </div>
 
@@ -116,7 +129,7 @@ async function clearAllData() {
           </div>
           <div>
             <p class="text-sm font-medium">Rex 資產總覽</p>
-            <p class="text-xs text-text-secondary">v0.1.0</p>
+            <p class="text-xs text-text-secondary">v1.0.0</p>
             <p class="text-xs text-text-secondary mt-0.5">所有資料僅存在你的裝置上</p>
           </div>
         </div>

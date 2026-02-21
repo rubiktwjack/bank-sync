@@ -1,24 +1,16 @@
 import 'dotenv/config'
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { createScraper, getAvailableBanks } from './banks/index.js'
 import { createExchange, getAvailableExchanges } from './exchanges/index.js'
 import type { ExchangeCredentials } from './exchanges/base-exchange.js'
 import { retry } from './utils/retry.js'
 import { logger } from './utils/logger.js'
-import { encrypt } from './utils/crypto.js'
-import type { BankConfig, ScraperConfig, SyncResult } from './types.js'
+import { encrypt, decrypt } from './utils/crypto.js'
+import type { BankConfig, BankScrapedData, ScraperConfig, SyncResult } from './types.js'
 
 /**
  * 從環境變數讀取銀行設定
- *
- * 環境變數格式：
- *   BANK_CATHAY_ENABLED=true
- *   BANK_XXX_USERNAME=<your-username>
- *   BANK_XXX_PASSWORD=<your-password>
- *   BANK_XXX_EXTRA_FIELD=<value>
- *
- * 每家銀行的 prefix 是 BANK_{BANKID_UPPER}_
  */
 function loadBankConfigs(): BankConfig[] {
   const configs: BankConfig[] = []
@@ -78,6 +70,13 @@ function loadExchangeConfigs(): { exchangeId: string; credentials: ExchangeCrede
   return configs
 }
 
+/** 解析 --targets=esun,binance CLI 參數 */
+function parseTargets(): string[] | null {
+  const arg = process.argv.find(a => a.startsWith('--targets='))
+  if (!arg) return null
+  return arg.slice('--targets='.length).split(',').map(t => t.trim()).filter(Boolean)
+}
+
 function loadConfig(): ScraperConfig {
   const isDryRun = process.argv.includes('--dry-run')
   const banks = loadBankConfigs()
@@ -96,11 +95,39 @@ function loadConfig(): ScraperConfig {
   }
 }
 
+/** 讀取現有結果（明文或從 .enc 解密） */
+function loadExistingResult(outputPath: string): SyncResult {
+  const empty: SyncResult = { syncedAt: '', banks: [] }
+
+  // 先嘗試明文
+  if (existsSync(outputPath)) {
+    try {
+      return JSON.parse(readFileSync(outputPath, 'utf-8'))
+    } catch {
+      return empty
+    }
+  }
+
+  // 嘗試 .enc
+  const encPath = outputPath + '.enc'
+  if (existsSync(encPath) && process.env.SYNC_PASSWORD) {
+    try {
+      const enc = readFileSync(encPath, 'utf-8')
+      return JSON.parse(decrypt(enc))
+    } catch {
+      return empty
+    }
+  }
+
+  return empty
+}
+
 async function main() {
   logger.info('=== Bank Sync 爬蟲啟動 ===')
 
   const isDryRun = process.argv.includes('--dry-run')
   const config = loadConfig()
+  const targets = parseTargets()
 
   if (isDryRun) {
     logger.info('[Dry Run] 設定檢查:')
@@ -110,38 +137,96 @@ async function main() {
     logger.info(`  Timeout: ${config.timeout}ms`)
     logger.info(`  Retries: ${config.retries}`)
     logger.info(`  Output: ${config.outputPath}`)
+    if (targets) logger.info(`  Targets: ${targets.join(', ')}`)
     return
   }
 
+  // 過濾目標
+  const bankConfigs = targets
+    ? config.banks.filter(b => targets.includes(b.bankId))
+    : config.banks
+  const exchangeConfigs = loadExchangeConfigs()
+  const filteredExchanges = targets
+    ? exchangeConfigs.filter(e => targets.includes(e.exchangeId))
+    : exchangeConfigs
+
+  if (targets) {
+    logger.info(`指定目標: ${targets.join(', ')}`)
+  }
+
+  const newResults: BankScrapedData[] = []
+
+  // 銀行爬蟲（依序）
+  for (const bankConfig of bankConfigs) {
+    logger.info(`\n--- 開始爬取: ${bankConfig.bankId} ---`)
+    try {
+      const scraper = createScraper(bankConfig.bankId)
+      const bankResult = await retry(
+        () => scraper.run(bankConfig.credentials, {
+          headless: config.headless,
+          timeout: config.timeout,
+        }),
+        bankConfig.bankId,
+        config.retries,
+      )
+      newResults.push(bankResult)
+    } catch (e) {
+      logger.error(`${bankConfig.bankId} 爬取失敗: ${e}`)
+      newResults.push({
+        bankId: bankConfig.bankId,
+        bankName: bankConfig.bankId,
+        scrapedAt: new Date().toISOString(),
+        success: false,
+        error: e instanceof Error ? e.message : String(e),
+        deposits: [],
+        foreignDeposits: [],
+        creditCards: [],
+        loans: [],
+      })
+    }
+  }
+
+  // 交易所（並行）
+  if (filteredExchanges.length > 0) {
+    logger.info(`\n--- 並行查詢 ${filteredExchanges.length} 家交易所 ---`)
+    const exchangeResults = await Promise.allSettled(
+      filteredExchanges.map(async ({ exchangeId, credentials }) => {
+        logger.info(`開始查詢: ${exchangeId}`)
+        const exchange = createExchange(exchangeId)
+        return exchange.run(credentials)
+      }),
+    )
+    for (let i = 0; i < exchangeResults.length; i++) {
+      const r = exchangeResults[i]
+      const { exchangeId } = filteredExchanges[i]
+      if (r.status === 'fulfilled') {
+        newResults.push(r.value)
+      } else {
+        logger.error(`${exchangeId} 查詢失敗: ${r.reason}`)
+        newResults.push({
+          bankId: exchangeId,
+          bankName: exchangeId,
+          scrapedAt: new Date().toISOString(),
+          success: false,
+          error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+          deposits: [],
+          foreignDeposits: [],
+          creditCards: [],
+          loans: [],
+        })
+      }
+    }
+  }
+
+  // 合併到現有資料
+  const targetIds = newResults.map(r => r.bankId)
+  const existing = targets ? loadExistingResult(config.outputPath) : { syncedAt: '', banks: [] as BankScrapedData[] }
+  const mergedBanks = existing.banks.filter(b => !targetIds.includes(b.bankId))
+  mergedBanks.push(...newResults)
+
   const result: SyncResult = {
     syncedAt: new Date().toISOString(),
-    banks: [],
-  }
-
-  // 銀行爬蟲
-  for (const bankConfig of config.banks) {
-    logger.info(`\n--- 開始爬取: ${bankConfig.bankId} ---`)
-    const scraper = createScraper(bankConfig.bankId)
-
-    const bankResult = await retry(
-      () => scraper.run(bankConfig.credentials, {
-        headless: config.headless,
-        timeout: config.timeout,
-      }),
-      bankConfig.bankId,
-      config.retries,
-    )
-
-    result.banks.push(bankResult)
-  }
-
-  // 加密貨幣交易所
-  const exchangeConfigs = loadExchangeConfigs()
-  for (const { exchangeId, credentials } of exchangeConfigs) {
-    logger.info(`\n--- 開始查詢: ${exchangeId} ---`)
-    const exchange = createExchange(exchangeId)
-    const exchangeResult = await exchange.run(credentials)
-    result.banks.push(exchangeResult)
+    banks: mergedBanks,
   }
 
   // 寫入結果
@@ -170,7 +255,6 @@ async function main() {
     for (const bank of result.banks.filter((b) => !b.success)) {
       logger.error(`${bank.bankName}: ${bank.error}`)
     }
-    process.exit(1)
   }
 }
 

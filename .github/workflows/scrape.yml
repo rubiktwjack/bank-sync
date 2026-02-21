@@ -6,6 +6,11 @@ on:
     - cron: '0 0 * * 1'
   # 手動觸發（PWA 同步按鈕用）
   workflow_dispatch:
+    inputs:
+      targets:
+        description: '要同步的目標（逗號分隔），空值=全部'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -19,6 +24,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Pull latest changes
+        run: git pull --rebase origin main
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -31,6 +39,27 @@ jobs:
       - name: Install Playwright browsers
         working-directory: scrapers
         run: npx playwright install chromium --with-deps
+
+      - name: Decrypt existing data for merge
+        if: inputs.targets != ''
+        working-directory: scrapers
+        env:
+          SYNC_PASSWORD: ${{ secrets.SYNC_PASSWORD }}
+        run: |
+          ENC_FILE="../data/latest.json.enc"
+          if [ -f "$ENC_FILE" ]; then
+            node -e "
+              const { readFileSync, writeFileSync } = require('fs');
+              const { createDecipheriv, pbkdf2Sync } = require('crypto');
+              const enc = JSON.parse(readFileSync('$ENC_FILE', 'utf-8'));
+              const key = pbkdf2Sync(process.env.SYNC_PASSWORD, Buffer.from(enc.salt, 'base64'), 100000, 32, 'sha256');
+              const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(enc.iv, 'base64'));
+              decipher.setAuthTag(Buffer.from(enc.tag, 'base64'));
+              const dec = Buffer.concat([decipher.update(Buffer.from(enc.data, 'base64')), decipher.final()]);
+              writeFileSync('../data/latest.json', dec.toString('utf8'));
+            "
+            echo "Decrypted existing data for merge"
+          fi
 
       - name: Run scrapers
         working-directory: scrapers
@@ -77,7 +106,12 @@ jobs:
           SCRAPER_RETRIES: '2'
           # 加密金鑰
           SYNC_PASSWORD: ${{ secrets.SYNC_PASSWORD }}
-        run: npm run scrape
+        run: |
+          if [ -n "${{ inputs.targets }}" ]; then
+            npm run scrape -- --targets=${{ inputs.targets }}
+          else
+            npm run scrape
+          fi
 
       - name: Commit encrypted data
         run: |

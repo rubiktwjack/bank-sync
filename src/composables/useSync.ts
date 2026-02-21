@@ -68,6 +68,20 @@ export const triggeringScrape = ref(false)
 export const scrapeStatus = ref<string | null>(null)
 /** 交易所/銀行同步失敗的錯誤訊息，key = bankName */
 export const bankErrors = ref<Record<string, string>>({})
+/** 正在個別同步的目標 ID */
+export const syncingTargets = ref<Set<string>>(new Set())
+
+/** 所有可同步的目標清單 */
+export const SYNC_TARGETS = [
+  { id: 'esun', name: '玉山銀行', icon: '🏦' },
+  { id: 'ctbc', name: '中國信託', icon: '🏦' },
+  { id: 'feib', name: '遠東銀行', icon: '🏦' },
+  { id: 'sinopac', name: '永豐銀行', icon: '🏦' },
+  { id: 'linebank', name: 'LINE Bank', icon: '🏦' },
+  { id: 'bingx', name: 'BingX', icon: '💰' },
+  { id: 'binance', name: 'Binance', icon: '💰' },
+  { id: 'bybit', name: 'Bybit', icon: '💰' },
+] as const
 
 /**
  * 從 /data/latest.json.enc 載入加密的爬蟲資料，解密後寫入 IndexedDB
@@ -234,17 +248,27 @@ const WORKFLOW_FILE = 'scrape.yml'
 
 /**
  * 手動觸發 GitHub Actions 爬蟲 workflow
- * 觸發後 poll 狀態，完成後等 deploy 再重新 fetch
+ * @param targets 要同步的目標 ID，不傳則全部
  */
-export async function triggerSync(): Promise<void> {
+export async function triggerSync(targets?: string[]): Promise<void> {
   const pat = import.meta.env.VITE_GH_PAT as string
   if (!pat) {
     scrapeStatus.value = '未設定 GitHub PAT，無法觸發同步'
     return
   }
 
+  const targetsStr = targets?.join(',') ?? ''
+  const targetNames = targets
+    ? targets.map(id => SYNC_TARGETS.find(t => t.id === id)?.name ?? id).join('、')
+    : '全部'
+
+  // 標記正在同步的目標
+  if (targets) {
+    for (const t of targets) syncingTargets.value.add(t)
+  }
+
   triggeringScrape.value = true
-  scrapeStatus.value = '正在觸發爬蟲...'
+  scrapeStatus.value = `正在觸發：${targetNames}...`
 
   try {
     const headers = {
@@ -253,12 +277,17 @@ export async function triggerSync(): Promise<void> {
     }
 
     // 觸發 workflow
+    const body: Record<string, unknown> = { ref: 'main' }
+    if (targetsStr) {
+      body.inputs = { targets: targetsStr }
+    }
+
     const triggerRes = await fetch(
       `https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches`,
       {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ref: 'main' }),
+        body: JSON.stringify(body),
       },
     )
 
@@ -266,7 +295,7 @@ export async function triggerSync(): Promise<void> {
       throw new Error(`觸發失敗: HTTP ${triggerRes.status}`)
     }
 
-    scrapeStatus.value = '已觸發，等待執行...'
+    scrapeStatus.value = `已觸發 ${targetNames}，等待執行...`
 
     // 等一下讓 GitHub 建立 run
     await sleep(5000)
@@ -286,7 +315,7 @@ export async function triggerSync(): Promise<void> {
 
       if (run.status === 'completed') {
         if (run.conclusion === 'success') {
-          scrapeStatus.value = '爬蟲完成，等待部署...'
+          scrapeStatus.value = `${targetNames} 完成，等待部署...`
           // 等 deploy workflow 完成
           await sleep(60000)
           scrapeStatus.value = '重新載入資料...'
@@ -299,7 +328,7 @@ export async function triggerSync(): Promise<void> {
         }
       }
 
-      scrapeStatus.value = `執行中... (${i + 1}/${maxAttempts})`
+      scrapeStatus.value = `同步中：${targetNames} (${i + 1}/${maxAttempts})`
       await sleep(15000)
     }
 
@@ -308,6 +337,9 @@ export async function triggerSync(): Promise<void> {
     scrapeStatus.value = e instanceof Error ? e.message : String(e)
   } finally {
     triggeringScrape.value = false
+    if (targets) {
+      for (const t of targets) syncingTargets.value.delete(t)
+    }
   }
 }
 
