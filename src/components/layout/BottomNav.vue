@@ -18,7 +18,7 @@ function isActive(tab: (typeof tabs)[0]) {
 </script>
 
 <template>
-  <nav class="fixed bottom-0 left-0 right-0 pb-safe z-50" style="background: rgba(15, 18, 25, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid rgba(255,255,255,0.06);">
+  <nav class="fixed bottom-0 left-0 right-0 pb-safe z-50" style="background: #0F1219; border-top: 1px solid rgba(255,255,255,0.06);">
     <div class="flex justify-around items-center h-16 max-w-lg mx-auto">
       <router-link
         v-for="tab in tabs"
