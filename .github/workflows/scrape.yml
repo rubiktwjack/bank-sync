@@ -91,5 +91,9 @@ jobs:
   # 爬完自動重新部署 GitHub Pages
   deploy:
     needs: scrape
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     uses: ./.github/workflows/deploy.yml
     secrets: inherit
