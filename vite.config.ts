@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: '/bank-sync/',
   server: {
     port: 5173,
     strictPort: true,
@@ -24,17 +25,17 @@ export default defineConfig({
         orientation: 'portrait',
         icons: [
           {
-            src: '/icons/icon-192.png',
+            src: '/bank-sync/icons/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: '/icons/icon-512.png',
+            src: '/bank-sync/icons/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
           },
           {
-            src: '/icons/icon-512.png',
+            src: '/bank-sync/icons/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
