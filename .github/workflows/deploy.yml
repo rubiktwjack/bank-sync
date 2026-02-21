@@ -26,8 +26,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout latest
         uses: actions/checkout@v4
+
+      - name: Pull latest changes
+        run: git pull origin ${{ github.ref_name }} --ff-only || true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
