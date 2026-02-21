@@ -1,17 +1,19 @@
-import { createCipheriv, randomBytes } from 'node:crypto'
+import { createCipheriv, randomBytes, pbkdf2Sync } from 'node:crypto'
 
 /**
- * AES-256-GCM 加密
- * 金鑰從環境變數 SYNC_ENCRYPTION_KEY 讀取（hex 格式，64 字元 = 32 bytes）
- * 輸出格式：JSON { iv, data, tag } 全部 base64
+ * AES-256-GCM 加密（密碼版）
+ * 密碼從環境變數 SYNC_PASSWORD 讀取
+ * 用 PBKDF2 從密碼導出 AES-256 金鑰
+ * 輸出格式：JSON { salt, iv, data, tag } 全部 base64
  */
 export function encrypt(plaintext: string): string {
-  const keyHex = process.env.SYNC_ENCRYPTION_KEY
-  if (!keyHex || keyHex.length !== 64) {
-    throw new Error('SYNC_ENCRYPTION_KEY 必須是 64 字元的 hex 字串（32 bytes）')
+  const password = process.env.SYNC_PASSWORD
+  if (!password) {
+    throw new Error('SYNC_PASSWORD 環境變數未設定')
   }
 
-  const key = Buffer.from(keyHex, 'hex')
+  const salt = randomBytes(16)
+  const key = pbkdf2Sync(password, salt, 100000, 32, 'sha256')
   const iv = randomBytes(12)
   const cipher = createCipheriv('aes-256-gcm', key, iv)
 
@@ -22,6 +24,7 @@ export function encrypt(plaintext: string): string {
   const tag = cipher.getAuthTag()
 
   return JSON.stringify({
+    salt: salt.toString('base64'),
     iv: iv.toString('base64'),
     data: encrypted.toString('base64'),
     tag: tag.toString('base64'),

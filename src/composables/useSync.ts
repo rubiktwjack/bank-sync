@@ -73,28 +73,46 @@ export const bankErrors = ref<Record<string, string>>({})
  * 從 /data/latest.json.enc 載入加密的爬蟲資料，解密後寫入 IndexedDB
  * 爬蟲資料的 source = 'scraper'，不會覆蓋手動輸入的資料
  */
+/** 取得已儲存的密碼 */
+export function getSyncPassword(): string | null {
+  return localStorage.getItem('sync_password')
+}
+
+/** 儲存密碼 */
+export function setSyncPassword(password: string) {
+  localStorage.setItem('sync_password', password)
+}
+
+/** 清除密碼 */
+export function clearSyncPassword() {
+  localStorage.removeItem('sync_password')
+}
+
 export async function loadSyncData(): Promise<void> {
   syncing.value = true
   syncError.value = null
 
   try {
-    // 優先嘗試加密版本，fallback 到明文（本地開發用）
     let data: SyncResult = undefined!
 
-    let decrypted = false
+    // 嘗試加密版本
     const encRes = await fetch('./data/latest.json.enc')
     if (encRes.ok) {
+      const password = getSyncPassword()
+      if (!password) {
+        syncError.value = 'need_password'
+        return
+      }
       try {
         const encText = await encRes.text()
-        const plaintext = await decrypt(encText)
+        const plaintext = await decrypt(encText, password)
         data = JSON.parse(plaintext)
-        decrypted = true
       } catch {
-        // 解密失敗（如沒有金鑰），fallback 到明文
+        syncError.value = 'wrong_password'
+        return
       }
-    }
-
-    if (!decrypted) {
+    } else {
+      // fallback 到明文（本地開發用）
       const res = await fetch('./data/latest.json')
       if (!res.ok) {
         if (res.status === 404) return

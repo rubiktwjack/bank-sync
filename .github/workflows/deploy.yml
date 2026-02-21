@@ -1,4 +1,4 @@
-name: Deploy to Cloudflare Pages
+name: Deploy to GitHub Pages
 
 on:
   push:
@@ -13,12 +13,17 @@ on:
   workflow_call:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,7 +39,6 @@ jobs:
 
       - name: Build
         env:
-          VITE_SYNC_ENCRYPTION_KEY: ${{ secrets.SYNC_ENCRYPTION_KEY }}
           VITE_GH_PAT: ${{ secrets.GH_PAT }}
         run: npm run build
 
@@ -46,9 +50,18 @@ jobs:
             cp data/latest.json.enc dist/data/
           fi
 
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=bank-sync
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

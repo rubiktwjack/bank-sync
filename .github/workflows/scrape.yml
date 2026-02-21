@@ -76,7 +76,7 @@ jobs:
           SCRAPER_TIMEOUT: '30000'
           SCRAPER_RETRIES: '2'
           # 加密金鑰
-          SYNC_ENCRYPTION_KEY: ${{ secrets.SYNC_ENCRYPTION_KEY }}
+          SYNC_PASSWORD: ${{ secrets.SYNC_PASSWORD }}
         run: npm run scrape
 
       - name: Commit encrypted data

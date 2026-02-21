@@ -154,7 +154,7 @@ async function main() {
   logger.info(`\n結果已寫入: ${config.outputPath}`)
 
   // 加密版本
-  if (process.env.SYNC_ENCRYPTION_KEY) {
+  if (process.env.SYNC_PASSWORD) {
     const encPath = config.outputPath + '.enc'
     writeFileSync(encPath, encrypt(jsonStr), 'utf-8')
     logger.info(`加密版本已寫入: ${encPath}`)
