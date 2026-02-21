@@ -162,34 +162,60 @@ function getFullTicker(): string {
   return t
 }
 
+async function triggerStockUpdate(ticker: string) {
+  const pat = import.meta.env.VITE_GH_PAT as string
+  if (!pat) return
+  try {
+    await fetch('https://api.github.com/repos/rubiktwjack/bank-sync/actions/workflows/update-stocks.yml/dispatches', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${pat}`,
+        Accept: 'application/vnd.github.v3+json',
+      },
+      body: JSON.stringify({ ref: 'main', inputs: { new_tickers: ticker } }),
+    })
+  } catch { /* best effort */ }
+}
+
 async function saveStock() {
   const ticker = getFullTicker()
   if (!ticker || !stockForm.value.shares) return
   stockFormLoading.value = true
   stockFormError.value = ''
   try {
-    // 驗證代碼有效
     const { fetchStockPrices } = await import('../services/stockPrice')
     const prices = await fetchStockPrices([ticker])
-    if (!prices[ticker]) {
+
+    if (!prices[ticker] && import.meta.env.DEV) {
+      // Dev: 即時查 Yahoo 失敗 → 代碼無效
       stockFormError.value = '找不到此股票代碼，請確認後重試'
       return
     }
+
+    // Production 查不到價格：先儲存持倉，觸發 Actions 更新股價
+    const name = prices[ticker]?.name
     if (editingStockId.value) {
       await store.updateStock(editingStockId.value, {
         ticker,
         shares: stockForm.value.shares,
         avgCost: stockForm.value.avgCost,
-        name: prices[ticker].name,
+        ...(name ? { name } : {}),
       })
     } else {
       await store.addStock({
         ticker,
         shares: stockForm.value.shares,
         avgCost: stockForm.value.avgCost,
-        name: prices[ticker].name,
+        ...(name ? { name } : {}),
       })
     }
+
+    // 如果沒有價格，自動觸發 Actions 抓取
+    if (!prices[ticker]) {
+      triggerStockUpdate(ticker)
+      stockFormError.value = ''
+    }
+
     showStockForm.value = false
   } catch {
     stockFormError.value = '股價查詢失敗，請稍後重試'
