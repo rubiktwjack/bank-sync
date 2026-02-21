@@ -35,9 +35,9 @@ bank-sync/
 │       ├── types.ts        # 爬蟲資料型別
 │       ├── banks/          # 各銀行實作 (cathay, ctbc, esun, fubon, taishin)
 │       └── utils/          # logger, retry, crypto（AES 加密）
-├── data/                   # 爬蟲輸出（皆 .gitignore，由 Actions 產生）
-│   ├── latest.json         # 明文（本地 debug 用）
-│   └── latest.json.enc     # 加密版（Actions 自行 commit）
+├── data/                   # 爬蟲輸出
+│   ├── latest.json         # 明文（.gitignore，本地 debug 用）
+│   └── latest.json.enc     # 加密版（進版控，由 Actions 產生）
 ├── .github/workflows/      # CI/CD
 │   ├── scrape.yml          # 每週一排程爬蟲 + 手動觸發
 │   └── deploy.yml          # Build PWA + 部署 GitHub Pages
@@ -106,7 +106,7 @@ npm run scrape:dry   # 測試設定
 ## 注意事項
 
 - 所有敏感資料（銀行帳密、密碼）透過環境變數傳入，**絕對不要** commit 到 repo
-- `data/latest.json.enc` 不進版控，由 GitHub Actions 爬蟲 workflow 自行 commit
+- `data/latest.json.enc` 進版控（已加密無安全疑慮），由 GitHub Actions 爬蟲 workflow 更新
 - commit message **不要**提及加密、GitHub Pages 等實作細節
 - `source` 欄位區分 `'scraper'`（自動抓取）和 `'manual'`（手動輸入）的資料
 - 台幣/外幣存款、信用卡由爬蟲自動抓取，不提供手動新增

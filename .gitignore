@@ -17,9 +17,10 @@ dist-ssr
 .env.*
 scrapers/.env
 
-# 爬蟲資料（明文 + 加密版都不進版控，由 GitHub Actions 產生並 commit）
+# 爬蟲明文資料（含敏感帳戶資訊，絕對不要 commit）
 data/latest.json
-data/latest.json.enc
+# 加密版允許 commit（由 GitHub Actions 產生，內容已加密無安全疑慮）
+!data/latest.json.enc
 
 # Claude Code 本地設定
 .claude/
