@@ -111,17 +111,17 @@ async function saveCustomAsset() {
     </div>
 
     <!-- Tabs -->
-    <div class="flex px-4 gap-2 mb-4">
+    <div class="flex px-4 gap-2 mb-4 overflow-x-auto">
       <button
         v-for="tab in ([
-          { key: 'deposit', label: '台幣', icon: Landmark },
-          { key: 'foreign', label: '外幣', icon: Globe },
-          { key: 'crypto', label: '加密', icon: Bitcoin },
+          { key: 'deposit', label: '台幣存款', icon: Landmark },
+          { key: 'foreign', label: '外幣存款', icon: Globe },
+          { key: 'crypto', label: '加密貨幣', icon: Bitcoin },
           { key: 'custom', label: '自訂', icon: Package },
         ] as const)"
         :key="tab.key"
         @click="activeTab = tab.key"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors shrink-0"
         :class="activeTab === tab.key ? 'bg-primary text-white' : 'bg-surface text-text-secondary'"
       >
         <component :is="tab.icon" :size="14" />
