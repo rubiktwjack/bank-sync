@@ -33,14 +33,16 @@ bank-sync/
 │       ├── runner.ts       # 主執行器（輸出明文 + 加密 JSON）
 │       ├── detect-selectors.ts  # 分析銀行登入頁的工具
 │       ├── types.ts        # 爬蟲資料型別
-│       ├── banks/          # 各銀行實作 (cathay, ctbc, esun, fubon, taishin)
+│       ├── fetch-stock-prices.ts  # 股價抓取腳本
+│       ├── banks/          # 各銀行實作 (esun, ctbc, feib, sinopac, linebank)
 │       └── utils/          # logger, retry, crypto（AES 加密）
 ├── data/                   # 爬蟲輸出
 │   ├── latest.json         # 明文（.gitignore，本地 debug 用）
 │   └── latest.json.enc     # 加密版（進版控，由 Actions 產生）
 ├── .github/workflows/      # CI/CD
 │   ├── scrape.yml          # 每週一排程爬蟲 + 手動觸發
-│   └── deploy.yml          # Build PWA + 部署 GitHub Pages
+│   ├── deploy.yml          # Build PWA + 部署 GitHub Pages
+│   └── update-stocks.yml   # 手動觸發股價更新 + 新增 ticker
 └── .mcp.json               # Chrome DevTools MCP 設定
 ```
 
@@ -66,10 +68,10 @@ bank-sync/
 | 銀行 | 檔案 | 狀態 |
 |------|------|------|
 | 玉山 (E.SUN) | `scrapers/src/banks/esun.ts` | 完整（台幣、外幣、信用卡） |
-| 中信 (CTBC) | `scrapers/src/banks/ctbc.ts` | TODO stub |
-| 遠東銀行 | `scrapers/src/banks/feib.ts` | TODO stub |
-| 永豐銀行 | `scrapers/src/banks/sinopac.ts` | TODO stub |
-| LINE Bank | `scrapers/src/banks/linebank.ts` | TODO stub |
+| 中信 (CTBC) | `scrapers/src/banks/ctbc.ts` | 完整（台幣、外幣、信用卡） |
+| 遠東銀行 (FEIB) | `scrapers/src/banks/feib.ts` | 完整（台幣、外幣；信用卡未實作） |
+| 永豐銀行 (Sinopac) | `scrapers/src/banks/sinopac.ts` | 完整（台幣、外幣、信用卡；含 OCR 驗證碼） |
+| LINE Bank | `scrapers/src/banks/linebank.ts` | 完整（台幣存款） |
 
 ## GitHub Secrets
 
@@ -95,12 +97,14 @@ bank-sync/
 # 前端開發
 npm run dev          # Vite dev server（固定 port 5173）
 npm run build        # 型別檢查 + 建置
+npm run preview      # 預覽 production build
 
 # 爬蟲（在 scrapers/ 目錄）
 cd scrapers
 npm install
 npm run scrape       # 執行爬蟲（需 .env 設定帳密 + SYNC_PASSWORD）
 npm run scrape:dry   # 測試設定
+npm run fetch-stocks # 抓取股價（讀取 data/stock-watchlist.json）
 ```
 
 ## 注意事項

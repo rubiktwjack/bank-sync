@@ -111,6 +111,14 @@ export class CtbcScraper extends BaseScraper {
       await page.waitForTimeout(5000)
     }
 
+    // 處理密碼變更提醒 modal → 按「不變更」跳過
+    const noChangeBtn = page.getByText('不變更', { exact: true })
+    if (await noChangeBtn.isVisible().catch(() => false)) {
+      logger.info('[中國信託] 偵測到密碼變更提醒，點擊「不變更」...')
+      await noChangeBtn.click()
+      await page.waitForTimeout(3000)
+    }
+
     // 等待總覽頁面出現（登入成功指標）
     try {
       await page.locator(SELECTORS.overview.totalAmount).waitFor({ timeout: 30000 })
