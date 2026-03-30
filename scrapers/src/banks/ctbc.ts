@@ -115,11 +115,13 @@ export class CtbcScraper extends BaseScraper {
       if (result === 'duplicate') {
         logger.info('[中國信託] 偵測到重複登入提示，點擊「確認登入」...')
         await page.getByText('確認登入', { exact: true }).click()
+        await page.getByText('確認登入', { exact: true }).waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {})
         continue
       }
       if (result === 'password') {
         logger.info('[中國信託] 偵測到密碼變更提醒，點擊「不變更」...')
         await page.getByText('不變更', { exact: true }).click()
+        await page.getByText('不變更', { exact: true }).waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {})
         continue
       }
       break // timeout
