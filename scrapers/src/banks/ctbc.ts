@@ -100,34 +100,33 @@ export class CtbcScraper extends BaseScraper {
     await page.locator(SELECTORS.login.submitButton).click()
     logger.info('[中國信託] 已點擊登入，等待回應...')
 
-    // 等待結果：總覽頁 或 重複登入 modal
-    await page.waitForTimeout(5000)
+    // Race: 等待總覽頁、重複登入 modal、或密碼變更提醒 modal（哪個先出現處理哪個）
+    for (let round = 0; round < 3; round++) {
+      const result = await Promise.race([
+        page.locator(SELECTORS.overview.totalAmount).waitFor({ timeout: 30000 }).then(() => 'overview' as const),
+        page.getByText('確認登入', { exact: true }).waitFor({ timeout: 30000 }).then(() => 'duplicate' as const),
+        page.getByText('不變更', { exact: true }).waitFor({ timeout: 30000 }).then(() => 'password' as const),
+      ]).catch(() => 'timeout' as const)
 
-    // 處理重複登入 modal：「您可能先前未正常登出」→ 按「確認登入」
-    const confirmBtn = page.getByText('確認登入', { exact: true })
-    if (await confirmBtn.isVisible().catch(() => false)) {
-      logger.info('[中國信託] 偵測到重複登入提示，點擊「確認登入」...')
-      await confirmBtn.click()
-      await page.waitForTimeout(5000)
+      if (result === 'overview') {
+        logger.info('[中國信託] 登入成功，總覽頁已載入')
+        return true
+      }
+      if (result === 'duplicate') {
+        logger.info('[中國信託] 偵測到重複登入提示，點擊「確認登入」...')
+        await page.getByText('確認登入', { exact: true }).click()
+        continue
+      }
+      if (result === 'password') {
+        logger.info('[中國信託] 偵測到密碼變更提醒，點擊「不變更」...')
+        await page.getByText('不變更', { exact: true }).click()
+        continue
+      }
+      break // timeout
     }
 
-    // 處理密碼變更提醒 modal → 按「不變更」跳過
-    const noChangeBtn = page.getByText('不變更', { exact: true })
-    if (await noChangeBtn.isVisible().catch(() => false)) {
-      logger.info('[中國信託] 偵測到密碼變更提醒，點擊「不變更」...')
-      await noChangeBtn.click()
-      await page.waitForTimeout(3000)
-    }
-
-    // 等待總覽頁面出現（登入成功指標）
-    try {
-      await page.locator(SELECTORS.overview.totalAmount).waitFor({ timeout: 30000 })
-      logger.info('[中國信託] 登入成功，總覽頁已載入')
-      return true
-    } catch {
-      logger.error('[中國信託] 登入後無法載入總覽頁')
-      return false
-    }
+    logger.error('[中國信託] 登入後無法載入總覽頁')
+    return false
   }
 
   /**
