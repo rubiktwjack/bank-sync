@@ -125,7 +125,12 @@ export class CtbcScraper extends BaseScraper {
       break // timeout
     }
 
-    logger.error('[中國信託] 登入後無法載入總覽頁')
+    // Debug: 擷取當前頁面狀態
+    const debugUrl = page.url()
+    const debugTitle = await page.title().catch(() => 'N/A')
+    const debugText = await page.locator('body').innerText().catch(() => '')
+    const snippet = debugText.replace(/\s+/g, ' ').trim().substring(0, 300)
+    logger.error(`[中國信託] 登入後無法載入總覽頁 | URL: ${debugUrl} | Title: ${debugTitle} | Body: ${snippet}`)
     return false
   }
 
