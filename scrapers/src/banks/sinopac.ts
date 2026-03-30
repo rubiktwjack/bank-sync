@@ -126,7 +126,7 @@ export class SinopacScraper extends BaseScraper {
       await page.waitForSelector('#imgCode', { timeout: 5000 })
       await page.waitForTimeout(1000)
 
-      // 瀏覽器端 fetch + canvas 預處理：統計像素顏色，移除彩色干擾線
+      // 瀏覽器端 fetch + canvas 預處理：灰階二值化，保留深色數字、去除淺色干擾線
       const base64 = await page.evaluate(`(async function() {
         try {
           var img = document.getElementById('imgCode');
@@ -134,7 +134,6 @@ export class SinopacScraper extends BaseScraper {
           var resp = await fetch(img.src);
           var blob = await resp.blob();
           var bmp = await createImageBitmap(blob);
-          // 先在原始尺寸處理
           var ow = bmp.width, oh = bmp.height;
           var c1 = document.createElement('canvas');
           c1.width = ow; c1.height = oh;
@@ -143,45 +142,15 @@ export class SinopacScraper extends BaseScraper {
           var id = x1.getImageData(0, 0, ow, oh);
           var d = id.data;
 
-          // Step 1: 統計每個顏色出現次數（量化到 8 位色，減少顏色數）
-          var colorCount = {};
-          for (var i = 0; i < d.length; i += 4) {
-            // 量化：每通道除以 32 再乘 32
-            var rq = (d[i] >> 5) << 5;
-            var gq = (d[i+1] >> 5) << 5;
-            var bq = (d[i+2] >> 5) << 5;
-            var key = rq + ',' + gq + ',' + bq;
-            colorCount[key] = (colorCount[key] || 0) + 1;
-          }
-
-          // Step 2: 找出最常見的兩個顏色（背景 + 數字）
-          var sorted = Object.entries(colorCount).sort(function(a,b) { return b[1] - a[1]; });
-          var keepColors = {};
-          // 保留前 2 個最常見顏色
-          for (var j = 0; j < Math.min(2, sorted.length); j++) {
-            keepColors[sorted[j][0]] = true;
-          }
-
-          // Step 3: 非保留顏色 → 白色
-          for (var i = 0; i < d.length; i += 4) {
-            var rq = (d[i] >> 5) << 5;
-            var gq = (d[i+1] >> 5) << 5;
-            var bq = (d[i+2] >> 5) << 5;
-            var key = rq + ',' + gq + ',' + bq;
-            if (!keepColors[key]) {
-              d[i] = d[i+1] = d[i+2] = 255;
-            }
-          }
-
-          // Step 4: 灰階化 + 二值化
+          // 灰階 + 二值化（閾值 100：數字為黑色，背景和彩色干擾線為白色）
           for (var i = 0; i < d.length; i += 4) {
             var gray = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
-            var val = gray < 160 ? 0 : 255;
+            var val = gray < 100 ? 0 : 255;
             d[i] = d[i+1] = d[i+2] = val;
           }
           x1.putImageData(id, 0, 0);
 
-          // Step 5: 放大 4 倍輸出
+          // 放大 4 倍輸出
           var scale = 4;
           var c2 = document.createElement('canvas');
           c2.width = ow * scale; c2.height = oh * scale;
