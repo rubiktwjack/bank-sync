@@ -112,9 +112,50 @@ export class LinebankScraper extends BaseScraper {
         waitUntil: 'networkidle',
         timeout: 15000,
       })
-      // 等到有任何含「主帳戶」字樣或 10+ 位連續數字的文字出現為止
+      await page.waitForTimeout(3000)
+
+      // 探查 transaction 頁的 form 結構和查詢按鈕
+      const txForm = await page.evaluate(`(function() {
+        var inputs = Array.from(document.querySelectorAll('input, select')).map(function(el){
+          return {
+            tag: el.tagName.toLowerCase(),
+            type: el.getAttribute('type') || '',
+            name: el.getAttribute('name') || '',
+            id: el.id || '',
+            placeholder: el.getAttribute('placeholder') || '',
+            label: el.getAttribute('aria-label') || '',
+            value: (el.value || '').slice(0, 30),
+          };
+        });
+        var buttons = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')).map(function(b){
+          return ((b.textContent||'').trim() || b.getAttribute('aria-label') || b.value || '').slice(0, 40);
+        }).filter(Boolean);
+        return { inputs: inputs.slice(0, 20), buttons: buttons.slice(0, 20) };
+      })()`) as { inputs: { tag: string; type: string; name: string; id: string; placeholder: string; label: string; value: string }[]; buttons: string[] }
+      logger.info(`[LINE Bank] /transaction inputs: ${JSON.stringify(txForm.inputs)}`)
+      logger.info(`[LINE Bank] /transaction buttons: [${txForm.buttons.join(' | ')}]`)
+
+      // 嘗試點擊「查詢」按鈕
+      const queryClicked = await page.evaluate(`(function() {
+        var btns = Array.from(document.querySelectorAll('button, input[type="submit"], [role="button"]'));
+        for (var i = 0; i < btns.length; i++) {
+          var t = (btns[i].textContent || btns[i].getAttribute('aria-label') || btns[i].value || '').trim();
+          if (/查詢|確定|送出|submit/i.test(t)) {
+            btns[i].click();
+            return t;
+          }
+        }
+        return '';
+      })()`) as string
+      if (queryClicked) {
+        logger.info(`[LINE Bank] 已點擊 "${queryClicked}" 按鈕`)
+        await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
+        await page.waitForTimeout(3000)
+      }
+
+      // 等到有任何含「主帳戶」字樣、可用餘額或 NT$ 金額的文字出現為止
       await page.waitForFunction(
-        `document.body && /主帳戶|可用餘額|\\d{10,}/.test(document.body.innerText)`,
+        `document.body && /主帳戶|可用餘額|結餘|NT\\$\\s*\\d/.test(document.body.innerText)`,
         { timeout: 15000 },
       ).catch(() => {})
       await page.waitForTimeout(2000)
