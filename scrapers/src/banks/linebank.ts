@@ -62,27 +62,50 @@ export class LinebankScraper extends BaseScraper {
         waitUntil: 'networkidle',
         timeout: 15000,
       })
-      await page.waitForTimeout(3000)
+      // 等到有任何含「主帳戶」字樣或 10+ 位連續數字的文字出現為止
+      await page.waitForFunction(
+        `document.body && /主帳戶|可用餘額|\\d{10,}/.test(document.body.innerText)`,
+        { timeout: 15000 },
+      ).catch(() => {})
+      await page.waitForTimeout(2000)
 
-      const data = await page.evaluate(() => {
-        // h2 contains: "主帳戶 (111011258007)"
-        const h2 = document.querySelector('h2')
-        const balanceP = document.querySelector('p')
+      const data = await page.evaluate(`(function() {
+        var headings = Array.from(document.querySelectorAll('h1, h2, h3, h4, [role="heading"]'));
+        var headingTexts = headings.map(function(el){ return (el.textContent||'').trim(); }).filter(Boolean);
+        // 優先挑含「主帳戶」或 10+ 位數字的標題
+        var acctLine = headingTexts.find(function(t){ return /主帳戶|\\(\\d{10,}\\)/.test(t); }) || '';
+        // fallback：從整頁抓「主帳戶 (xxxx)」
+        var bodyText = document.body ? document.body.innerText : '';
+        if (!acctLine) {
+          var m = bodyText.match(/主帳戶[^\\n]*?\\(\\s*(\\d{8,})\\s*\\)/);
+          if (m) acctLine = m[0];
+        }
+        // fallback 2：整頁找連續 10+ 位數字
+        if (!acctLine) {
+          var m2 = bodyText.match(/\\b(\\d{10,15})\\b/);
+          if (m2) acctLine = m2[0];
+        }
+        var balLine = '';
+        var allText = Array.from(document.querySelectorAll('p, span, div, li'))
+          .map(function(el){ return (el.textContent||'').trim(); })
+          .filter(function(t){ return t.includes('可用餘額') && t.length < 200; });
+        if (allText.length > 0) balLine = allText[0];
+        if (!balLine) {
+          var mb = bodyText.match(/可用餘額[^\\n]*/);
+          if (mb) balLine = mb[0];
+        }
+        return {
+          acctLine: acctLine,
+          balLine: balLine,
+          headingSample: headingTexts.slice(0, 5).join(' | '),
+          bodySnippet: bodyText.slice(0, 400),
+        };
+      })()`) as { acctLine: string; balLine: string; headingSample: string; bodySnippet: string }
 
-        const h2Text = h2?.textContent?.trim() || ''
-        // Extract all p tags to find the balance one
-        const allP = Array.from(document.querySelectorAll('p'))
-        const balText = allP.find(p => p.textContent?.includes('可用餘額'))?.textContent?.trim() || ''
-
-        return { h2Text, balText }
-      })
-
-      // Parse account number from "主帳戶 (111011258007)"
-      const acctMatch = data.h2Text.match(/\((\d+)\)/)
+      const acctMatch = data.acctLine.match(/\((\d+)\)/) ?? data.acctLine.match(/(\d{8,15})/)
       const accountNumber = acctMatch ? acctMatch[1] : ''
 
-      // Parse balance from "可用餘額 : NT$2,853"
-      const balMatch = data.balText.match(/NT\$[\s]*([\d,]+)/)
+      const balMatch = data.balLine.match(/NT\$[\s]*([\d,]+)/) ?? data.balLine.match(/([\d,]+)/)
       const balance = balMatch ? parseFloat(balMatch[1].replace(/,/g, '')) : 0
 
       if (accountNumber) {
@@ -94,7 +117,7 @@ export class LinebankScraper extends BaseScraper {
         })
         logger.info(`[LINE Bank] 主帳戶 ${accountNumber}, 餘額 ${balance}`)
       } else {
-        logger.warn(`[LINE Bank] 無法解析帳號: ${data.h2Text}`)
+        logger.warn(`[LINE Bank] 無法解析帳號，headings: "${data.headingSample}" body: "${data.bodySnippet.slice(0, 200)}"`)
       }
     } catch (error) {
       logger.error(`[LINE Bank] 爬取存款失敗: ${error}`)
