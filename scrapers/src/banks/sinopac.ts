@@ -126,8 +126,8 @@ export class SinopacScraper extends BaseScraper {
       await page.waitForSelector('#imgCode', { timeout: 5000 })
       await page.waitForTimeout(1000)
 
-      // 瀏覽器端 fetch + canvas 預處理：灰階二值化，保留深色數字、去除淺色干擾線
-      const base64 = await page.evaluate(`(async function() {
+      // 瀏覽器端 fetch 原始圖片（base64 PNG）
+      const rawBase64 = await page.evaluate(`(async function() {
         try {
           var img = document.getElementById('imgCode');
           if (!img || !img.src) return '';
@@ -135,42 +135,13 @@ export class SinopacScraper extends BaseScraper {
           var blob = await resp.blob();
           var bmp = await createImageBitmap(blob);
           var ow = bmp.width, oh = bmp.height;
-          var c1 = document.createElement('canvas');
-          c1.width = ow; c1.height = oh;
-          var x1 = c1.getContext('2d');
-          x1.drawImage(bmp, 0, 0);
-          var id = x1.getImageData(0, 0, ow, oh);
-          var d = id.data;
-
-          // 灰階 + 二值化（閾值 100：數字為黑色，背景和彩色干擾線為白色）
-          for (var i = 0; i < d.length; i += 4) {
-            var gray = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
-            var val = gray < 100 ? 0 : 255;
-            d[i] = d[i+1] = d[i+2] = val;
-          }
-          x1.putImageData(id, 0, 0);
-
-          // 放大 4 倍輸出
-          var scale = 4;
-          var c2 = document.createElement('canvas');
-          c2.width = ow * scale; c2.height = oh * scale;
-          var x2 = c2.getContext('2d');
-          x2.imageSmoothingEnabled = false;
-          x2.drawImage(c1, 0, 0, c2.width, c2.height);
-          return c2.toDataURL('image/png').split(',')[1];
+          var c = document.createElement('canvas');
+          c.width = ow; c.height = oh;
+          var x = c.getContext('2d');
+          x.drawImage(bmp, 0, 0);
+          return c.toDataURL('image/png').split(',')[1];
         } catch(e) { return 'ERR:' + e.message; }
       })()`) as string
-
-      let imgBuf: Buffer
-      if (base64 && !base64.startsWith('ERR:')) {
-        imgBuf = Buffer.from(base64, 'base64')
-      } else {
-        if (base64 && base64.startsWith('ERR:')) {
-          logger.info(`[永豐銀行] Canvas 失敗: ${base64}, 改用截圖`)
-        }
-        const imgEl = page.locator('#imgCode')
-        imgBuf = await imgEl.screenshot({ timeout: 5000 })
-      }
 
       const worker = await Tesseract.createWorker('eng')
       await worker.setParameters({
@@ -178,19 +149,86 @@ export class SinopacScraper extends BaseScraper {
         tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
       })
 
-      const { data: { text } } = await worker.recognize(imgBuf)
-      await worker.terminate()
+      try {
+        const candidates: string[] = []
 
-      const cleaned = text.replace(/\D/g, '')
-      if (cleaned.length === 6) return cleaned
-      if (cleaned.length > 0) {
-        logger.info(`[永豐銀行] OCR 結果 "${cleaned}" (${cleaned.length}碼)`)
+        if (rawBase64 && !rawBase64.startsWith('ERR:')) {
+          // 多 threshold 嘗試：不同圖的最佳閾值可能不同
+          for (const threshold of [90, 100, 110, 120, 130]) {
+            const processed = await this.preprocessCaptcha(page, threshold)
+            if (!processed) continue
+            const imgBuf = Buffer.from(processed, 'base64')
+            const { data: { text } } = await worker.recognize(imgBuf)
+            const cleaned = text.replace(/\D/g, '')
+            if (cleaned.length === 6) {
+              await worker.terminate()
+              return cleaned
+            }
+            if (cleaned) candidates.push(`t${threshold}="${cleaned}"`)
+          }
+        } else if (rawBase64 && rawBase64.startsWith('ERR:')) {
+          logger.info(`[永豐銀行] Canvas 取圖失敗: ${rawBase64}`)
+        }
+
+        // fallback：原圖（不做二值化）
+        const imgEl = page.locator('#imgCode')
+        const rawShot = await imgEl.screenshot({ timeout: 5000 })
+        const { data: { text: rawText } } = await worker.recognize(rawShot)
+        const rawCleaned = rawText.replace(/\D/g, '')
+        if (rawCleaned.length === 6) {
+          await worker.terminate()
+          return rawCleaned
+        }
+        if (rawCleaned) candidates.push(`raw="${rawCleaned}"`)
+
+        await worker.terminate()
+
+        if (candidates.length > 0) {
+          logger.info(`[永豐銀行] OCR 候選 ${candidates.join(', ')}`)
+        }
+        return null
+      } catch (ocrErr) {
+        await worker.terminate().catch(() => {})
+        throw ocrErr
       }
-      return null
     } catch (error) {
       logger.error(`[永豐銀行] 驗證碼 OCR 失敗: ${error}`)
       return null
     }
+  }
+
+  /** 瀏覽器端灰階二值化 + 4x 放大，回傳 base64 PNG */
+  private async preprocessCaptcha(page: Page, threshold: number): Promise<string | null> {
+    const b64 = await page.evaluate(`(async function(threshold) {
+      try {
+        var img = document.getElementById('imgCode');
+        if (!img || !img.src) return '';
+        var resp = await fetch(img.src);
+        var blob = await resp.blob();
+        var bmp = await createImageBitmap(blob);
+        var ow = bmp.width, oh = bmp.height;
+        var c1 = document.createElement('canvas');
+        c1.width = ow; c1.height = oh;
+        var x1 = c1.getContext('2d');
+        x1.drawImage(bmp, 0, 0);
+        var id = x1.getImageData(0, 0, ow, oh);
+        var d = id.data;
+        for (var i = 0; i < d.length; i += 4) {
+          var gray = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+          var val = gray < threshold ? 0 : 255;
+          d[i] = d[i+1] = d[i+2] = val;
+        }
+        x1.putImageData(id, 0, 0);
+        var scale = 4;
+        var c2 = document.createElement('canvas');
+        c2.width = ow * scale; c2.height = oh * scale;
+        var x2 = c2.getContext('2d');
+        x2.imageSmoothingEnabled = false;
+        x2.drawImage(c1, 0, 0, c2.width, c2.height);
+        return c2.toDataURL('image/png').split(',')[1];
+      } catch(e) { return ''; }
+    })(${threshold})`) as string
+    return b64 || null
   }
 
   async scrapeDeposits(page: Page): Promise<ScrapedDeposit[]> {
