@@ -58,6 +58,40 @@ export class LinebankScraper extends BaseScraper {
     const deposits: ScrapedDeposit[] = []
 
     try {
+      // 先在登入後的當前頁（通常是首頁 / dashboard）抓餘額，因為 /transaction 不含餘額
+      const postLoginUrl = page.url()
+      logger.info(`[LINE Bank] 登入後 URL: ${postLoginUrl}`)
+
+      const preData = await page.evaluate(`(function() {
+        var bodyText = document.body ? document.body.innerText : '';
+        var nt = bodyText.match(/NT\\$\\s*[\\d,]+/g) || [];
+        var balKeywords = ['可用餘額', '帳戶餘額', '帳戶結餘', '存款餘額', '可動用', '結餘'];
+        var balLine = '';
+        for (var k = 0; k < balKeywords.length && !balLine; k++) {
+          var re = new RegExp(balKeywords[k] + '[^\\n]*');
+          var mb = bodyText.match(re);
+          if (mb) balLine = mb[0];
+        }
+        return { ntAmounts: nt.slice(0, 10), balLine: balLine, snippet: bodyText.slice(0, 1500) };
+      })()`) as { ntAmounts: string[]; balLine: string; snippet: string }
+      logger.info(`[LINE Bank] 首頁 NT$ 金額: [${preData.ntAmounts.join(', ')}], balLine: "${preData.balLine.slice(0, 80)}"`)
+
+      // 取首頁第一個 NT$ 金額作為預設餘額；若之後 /transaction 抓到更具體的會覆蓋
+      let prelimBalance = 0
+      let prelimSource = 'none'
+      const preBalMatch = preData.balLine.match(/NT\$[\s]*([\d,]+)/) ?? preData.balLine.match(/([\d,]+)/)
+      if (preBalMatch) {
+        prelimBalance = parseFloat(preBalMatch[1].replace(/,/g, ''))
+        prelimSource = `balLine="${preData.balLine.slice(0, 80)}"`
+      } else if (preData.ntAmounts.length > 0) {
+        const first = preData.ntAmounts[0].match(/([\d,]+)/)
+        if (first) {
+          prelimBalance = parseFloat(first[1].replace(/,/g, ''))
+          prelimSource = `homeNT=${preData.ntAmounts[0]}`
+        }
+      }
+
+      // 若首頁沒帳號資訊，還是去 /transaction 抓帳號
       await page.goto('https://accessibility.linebank.com.tw/transaction', {
         waitUntil: 'networkidle',
         timeout: 15000,
@@ -111,18 +145,18 @@ export class LinebankScraper extends BaseScraper {
         data.acctLine.match(/(\d[\d-]{9,20}\d)/)
       const accountNumber = acctMatch ? acctMatch[1].replace(/-/g, '') : ''
 
-      // 先從 balLine 抓 NT$ 或純數字；若 balLine 為空，退而取整頁第一個 NT$ 金額
-      let balance = 0
-      let balSource = 'none'
+      // 從 /transaction 再嘗試抓一次，否則沿用首頁預解析的餘額
+      let balance = prelimBalance
+      let balSource = prelimSource
       const balMatch = data.balLine.match(/NT\$[\s]*([\d,]+)/) ?? data.balLine.match(/([\d,]+)/)
       if (balMatch) {
         balance = parseFloat(balMatch[1].replace(/,/g, ''))
-        balSource = `balLine="${data.balLine.slice(0, 80)}"`
-      } else if (data.ntAmounts.length > 0) {
+        balSource = `transaction balLine="${data.balLine.slice(0, 80)}"`
+      } else if (data.ntAmounts.length > 0 && balance === 0) {
         const firstNT = data.ntAmounts[0].match(/([\d,]+)/)
         if (firstNT) {
           balance = parseFloat(firstNT[1].replace(/,/g, ''))
-          balSource = `ntAmounts[0]=${data.ntAmounts[0]}`
+          balSource = `transaction ntAmounts[0]=${data.ntAmounts[0]}`
         }
       }
 
