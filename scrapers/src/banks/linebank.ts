@@ -72,17 +72,17 @@ export class LinebankScraper extends BaseScraper {
       const data = await page.evaluate(`(function() {
         var headings = Array.from(document.querySelectorAll('h1, h2, h3, h4, [role="heading"]'));
         var headingTexts = headings.map(function(el){ return (el.textContent||'').trim(); }).filter(Boolean);
-        // 優先挑含「主帳戶」或 10+ 位數字的標題
-        var acctLine = headingTexts.find(function(t){ return /主帳戶|\\(\\d{10,}\\)/.test(t); }) || '';
-        // fallback：從整頁抓「主帳戶 (xxxx)」
+        // 優先挑含「主帳戶」或多位數字的標題
+        var acctLine = headingTexts.find(function(t){ return /主帳戶|\\d[\\d-]{8,}/.test(t); }) || '';
+        // fallback：從整頁抓「主帳戶 xxx-xxxx-xxxxx」或「主帳戶 (xxxxxxx)」
         var bodyText = document.body ? document.body.innerText : '';
         if (!acctLine) {
-          var m = bodyText.match(/主帳戶[^\\n]*?\\(\\s*(\\d{8,})\\s*\\)/);
+          var m = bodyText.match(/主帳戶[^\\n]*/);
           if (m) acctLine = m[0];
         }
-        // fallback 2：整頁找連續 10+ 位數字
+        // fallback 2：整頁找連續 10+ 位數字（可含 dash）
         if (!acctLine) {
-          var m2 = bodyText.match(/\\b(\\d{10,15})\\b/);
+          var m2 = bodyText.match(/\\d[\\d-]{9,20}\\d/);
           if (m2) acctLine = m2[0];
         }
         var balLine = '';
@@ -102,8 +102,12 @@ export class LinebankScraper extends BaseScraper {
         };
       })()`) as { acctLine: string; balLine: string; headingSample: string; bodySnippet: string }
 
-      const acctMatch = data.acctLine.match(/\((\d+)\)/) ?? data.acctLine.match(/(\d{8,15})/)
-      const accountNumber = acctMatch ? acctMatch[1] : ''
+      // 優先抓括號裡的純數字；否則抓「主帳戶」後面的數字+dash 組合；最後抓任何 10+ 位數字序列
+      const acctMatch =
+        data.acctLine.match(/\((\d+)\)/) ??
+        data.acctLine.match(/主帳戶\s*[：:]?\s*([\d-]{10,})/) ??
+        data.acctLine.match(/(\d[\d-]{9,20}\d)/)
+      const accountNumber = acctMatch ? acctMatch[1].replace(/-/g, '') : ''
 
       const balMatch = data.balLine.match(/NT\$[\s]*([\d,]+)/) ?? data.balLine.match(/([\d,]+)/)
       const balance = balMatch ? parseFloat(balMatch[1].replace(/,/g, '')) : 0
