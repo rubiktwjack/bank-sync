@@ -114,33 +114,38 @@ export class LinebankScraper extends BaseScraper {
       })
       await page.waitForTimeout(3000)
 
-      // 探查 transaction 頁的 form 結構和查詢按鈕
-      const txForm = await page.evaluate(`(function() {
-        var inputs = Array.from(document.querySelectorAll('input, select')).map(function(el){
-          return {
-            tag: el.tagName.toLowerCase(),
-            type: el.getAttribute('type') || '',
-            name: el.getAttribute('name') || '',
-            id: el.id || '',
-            placeholder: el.getAttribute('placeholder') || '',
-            label: el.getAttribute('aria-label') || '',
-            value: (el.value || '').slice(0, 30),
-          };
+      // Transaction 頁需要先選帳戶再點查詢才會顯示結餘 / 餘額
+      // 列出 dropdown 選項
+      const acctOptions = await page.evaluate(`(function() {
+        var sel = document.getElementById('account-dropdown');
+        if (!sel) return [];
+        return Array.from(sel.options).map(function(o){
+          return { value: o.value, text: (o.textContent||'').trim().slice(0, 60) };
         });
-        var buttons = Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')).map(function(b){
-          return ((b.textContent||'').trim() || b.getAttribute('aria-label') || b.value || '').slice(0, 40);
-        }).filter(Boolean);
-        return { inputs: inputs.slice(0, 20), buttons: buttons.slice(0, 20) };
-      })()`) as { inputs: { tag: string; type: string; name: string; id: string; placeholder: string; label: string; value: string }[]; buttons: string[] }
-      logger.info(`[LINE Bank] /transaction inputs: ${JSON.stringify(txForm.inputs)}`)
-      logger.info(`[LINE Bank] /transaction buttons: [${txForm.buttons.join(' | ')}]`)
+      })()`) as { value: string; text: string }[]
+      logger.info(`[LINE Bank] account-dropdown options: ${JSON.stringify(acctOptions)}`)
 
-      // 嘗試點擊「查詢」按鈕
+      // 選第一個「非空 value」的選項
+      const firstRealOption = acctOptions.find(o => o.value && o.value.trim().length > 0)
+      if (firstRealOption) {
+        await page.selectOption('#account-dropdown', firstRealOption.value).catch(async () => {
+          // fallback 用 index
+          await page.selectOption('#account-dropdown', { index: 1 })
+        })
+        await page.waitForTimeout(500)
+        logger.info(`[LINE Bank] 已選帳戶: ${firstRealOption.text}`)
+      } else if (acctOptions.length > 1) {
+        await page.selectOption('#account-dropdown', { index: 1 })
+        await page.waitForTimeout(500)
+        logger.info(`[LINE Bank] 已選第一個 option: ${acctOptions[1]?.text || '?'}`)
+      }
+
+      // 點「查詢」按鈕
       const queryClicked = await page.evaluate(`(function() {
         var btns = Array.from(document.querySelectorAll('button, input[type="submit"], [role="button"]'));
         for (var i = 0; i < btns.length; i++) {
           var t = (btns[i].textContent || btns[i].getAttribute('aria-label') || btns[i].value || '').trim();
-          if (/查詢|確定|送出|submit/i.test(t)) {
+          if (/^查詢$/.test(t)) {
             btns[i].click();
             return t;
           }
@@ -148,7 +153,7 @@ export class LinebankScraper extends BaseScraper {
         return '';
       })()`) as string
       if (queryClicked) {
-        logger.info(`[LINE Bank] 已點擊 "${queryClicked}" 按鈕`)
+        logger.info(`[LINE Bank] 已點擊 "${queryClicked}"`)
         await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
         await page.waitForTimeout(3000)
       }
@@ -165,6 +170,13 @@ export class LinebankScraper extends BaseScraper {
         var headingTexts = headings.map(function(el){ return (el.textContent||'').trim(); }).filter(Boolean);
         // 優先挑含「主帳戶」或多位數字的標題
         var acctLine = headingTexts.find(function(t){ return /主帳戶|\\d[\\d-]{8,}/.test(t); }) || '';
+        // 查詢後頁面可能出現表格，從 dropdown 的 selected option 取帳號
+        if (!acctLine) {
+          var sel = document.getElementById('account-dropdown');
+          if (sel && sel.selectedOptions && sel.selectedOptions[0]) {
+            acctLine = sel.selectedOptions[0].textContent.trim();
+          }
+        }
         // fallback：從整頁抓「主帳戶 xxx-xxxx-xxxxx」或「主帳戶 (xxxxxxx)」
         var bodyText = document.body ? document.body.innerText : '';
         if (!acctLine) {
