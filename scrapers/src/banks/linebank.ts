@@ -85,22 +85,24 @@ export class LinebankScraper extends BaseScraper {
           var m2 = bodyText.match(/\\d[\\d-]{9,20}\\d/);
           if (m2) acctLine = m2[0];
         }
+        // 多種餘額關鍵字 + 金額 pattern，擴大匹配
         var balLine = '';
-        var allText = Array.from(document.querySelectorAll('p, span, div, li'))
-          .map(function(el){ return (el.textContent||'').trim(); })
-          .filter(function(t){ return t.includes('可用餘額') && t.length < 200; });
-        if (allText.length > 0) balLine = allText[0];
-        if (!balLine) {
-          var mb = bodyText.match(/可用餘額[^\\n]*/);
+        var balKeywords = ['可用餘額', '帳戶餘額', '帳戶結餘', '存款餘額', '可動用', '結餘', '餘額'];
+        for (var k = 0; k < balKeywords.length && !balLine; k++) {
+          var re = new RegExp(balKeywords[k] + '[^\\n]*');
+          var mb = bodyText.match(re);
           if (mb) balLine = mb[0];
         }
+        // 整頁所有 NT$ 金額（>= 1 元），方便 debug
+        var ntMatches = bodyText.match(/NT\\$\\s*[\\d,]+/g) || [];
         return {
           acctLine: acctLine,
           balLine: balLine,
           headingSample: headingTexts.slice(0, 5).join(' | '),
-          bodySnippet: bodyText.slice(0, 400),
+          bodySnippet: bodyText.slice(0, 2000),
+          ntAmounts: ntMatches.slice(0, 10),
         };
-      })()`) as { acctLine: string; balLine: string; headingSample: string; bodySnippet: string }
+      })()`) as { acctLine: string; balLine: string; headingSample: string; bodySnippet: string; ntAmounts: string[] }
 
       // 優先抓括號裡的純數字；否則抓「主帳戶」後面的數字+dash 組合；最後抓任何 10+ 位數字序列
       const acctMatch =
@@ -109,8 +111,20 @@ export class LinebankScraper extends BaseScraper {
         data.acctLine.match(/(\d[\d-]{9,20}\d)/)
       const accountNumber = acctMatch ? acctMatch[1].replace(/-/g, '') : ''
 
+      // 先從 balLine 抓 NT$ 或純數字；若 balLine 為空，退而取整頁第一個 NT$ 金額
+      let balance = 0
+      let balSource = 'none'
       const balMatch = data.balLine.match(/NT\$[\s]*([\d,]+)/) ?? data.balLine.match(/([\d,]+)/)
-      const balance = balMatch ? parseFloat(balMatch[1].replace(/,/g, '')) : 0
+      if (balMatch) {
+        balance = parseFloat(balMatch[1].replace(/,/g, ''))
+        balSource = `balLine="${data.balLine.slice(0, 80)}"`
+      } else if (data.ntAmounts.length > 0) {
+        const firstNT = data.ntAmounts[0].match(/([\d,]+)/)
+        if (firstNT) {
+          balance = parseFloat(firstNT[1].replace(/,/g, ''))
+          balSource = `ntAmounts[0]=${data.ntAmounts[0]}`
+        }
+      }
 
       if (accountNumber) {
         deposits.push({
@@ -119,9 +133,12 @@ export class LinebankScraper extends BaseScraper {
           currency: 'TWD',
           accountType: 'savings',
         })
-        logger.info(`[LINE Bank] 主帳戶 ${accountNumber}, 餘額 ${balance}`)
+        logger.info(`[LINE Bank] 主帳戶 ${accountNumber}, 餘額 ${balance} (來源: ${balSource})`)
+        if (balance === 0) {
+          logger.warn(`[LINE Bank] 餘額為 0，NT$ matches: [${data.ntAmounts.join(', ')}], body: "${data.bodySnippet.slice(0, 600)}"`)
+        }
       } else {
-        logger.warn(`[LINE Bank] 無法解析帳號，headings: "${data.headingSample}" body: "${data.bodySnippet.slice(0, 200)}"`)
+        logger.warn(`[LINE Bank] 無法解析帳號，headings: "${data.headingSample}" body: "${data.bodySnippet.slice(0, 400)}"`)
       }
     } catch (error) {
       logger.error(`[LINE Bank] 爬取存款失敗: ${error}`)
