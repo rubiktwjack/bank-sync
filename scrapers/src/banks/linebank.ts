@@ -62,7 +62,14 @@ export class LinebankScraper extends BaseScraper {
       const postLoginUrl = page.url()
       logger.info(`[LINE Bank] 登入後 URL: ${postLoginUrl}`)
 
-      const preData = await page.evaluate(`(function() {
+      // 探查頁面：列出所有 link/button 文字，方便找餘額入口
+      const explore = await page.evaluate(`(function() {
+        var links = Array.from(document.querySelectorAll('a')).map(function(a){
+          return { text: (a.textContent||'').trim().slice(0, 60), href: a.getAttribute('href') || '' };
+        }).filter(function(x){ return x.text && x.text.length > 0; });
+        var buttons = Array.from(document.querySelectorAll('button, [role="button"]')).map(function(b){
+          return ((b.textContent||'').trim() || b.getAttribute('aria-label') || '').slice(0, 60);
+        }).filter(Boolean);
         var bodyText = document.body ? document.body.innerText : '';
         var nt = bodyText.match(/NT\\$\\s*[\\d,]+/g) || [];
         var balKeywords = ['可用餘額', '帳戶餘額', '帳戶結餘', '存款餘額', '可動用', '結餘'];
@@ -72,9 +79,18 @@ export class LinebankScraper extends BaseScraper {
           var mb = bodyText.match(re);
           if (mb) balLine = mb[0];
         }
-        return { ntAmounts: nt.slice(0, 10), balLine: balLine, snippet: bodyText.slice(0, 1500) };
-      })()`) as { ntAmounts: string[]; balLine: string; snippet: string }
-      logger.info(`[LINE Bank] 首頁 NT$ 金額: [${preData.ntAmounts.join(', ')}], balLine: "${preData.balLine.slice(0, 80)}"`)
+        return {
+          links: links.slice(0, 20),
+          buttons: buttons.slice(0, 15),
+          ntAmounts: nt.slice(0, 10),
+          balLine: balLine,
+          snippet: bodyText.slice(0, 1500),
+        };
+      })()`) as { links: { text: string; href: string }[]; buttons: string[]; ntAmounts: string[]; balLine: string; snippet: string }
+      logger.info(`[LINE Bank] 首頁 links: ${JSON.stringify(explore.links)}`)
+      logger.info(`[LINE Bank] 首頁 buttons: [${explore.buttons.join(', ')}]`)
+      logger.info(`[LINE Bank] 首頁 NT$: [${explore.ntAmounts.join(', ')}], balLine: "${explore.balLine.slice(0, 80)}"`)
+      const preData = explore
 
       // 取首頁第一個 NT$ 金額作為預設餘額；若之後 /transaction 抓到更具體的會覆蓋
       let prelimBalance = 0
