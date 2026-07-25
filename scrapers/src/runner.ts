@@ -95,25 +95,29 @@ function loadConfig(): ScraperConfig {
   }
 }
 
-/** 讀取現有結果（明文或從 .enc 解密） */
+/**
+ * 讀取現有結果（優先從 .enc 解密，因為那才是已 commit 的權威版本；
+ * 本機明文 latest.json 只是 debug 用副產品，可能是過期的殘留檔，
+ * 不能拿來當合併基準，否則會用舊資料蓋掉 .enc 裡較新的內容）
+ */
 function loadExistingResult(outputPath: string): SyncResult {
   const empty: SyncResult = { syncedAt: '', banks: [] }
 
-  // 先嘗試明文
-  if (existsSync(outputPath)) {
-    try {
-      return JSON.parse(readFileSync(outputPath, 'utf-8'))
-    } catch {
-      return empty
-    }
-  }
-
-  // 嘗試 .enc
+  // 先嘗試 .enc（權威來源）
   const encPath = outputPath + '.enc'
   if (existsSync(encPath) && process.env.SYNC_PASSWORD) {
     try {
       const enc = readFileSync(encPath, 'utf-8')
       return JSON.parse(decrypt(enc))
+    } catch {
+      // decrypt 失敗（密碼錯誤等）才退回明文
+    }
+  }
+
+  // 退回明文
+  if (existsSync(outputPath)) {
+    try {
+      return JSON.parse(readFileSync(outputPath, 'utf-8'))
     } catch {
       return empty
     }
