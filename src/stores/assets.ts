@@ -27,7 +27,7 @@ export const useAssetStore = defineStore('assets', () => {
     deposits.value.reduce((sum, d) => sum + d.balance, 0)
   )
 
-  const EXCHANGES = ['BingX', 'Binance', 'Bybit']
+  const EXCHANGES = ['BingX', 'Binance', 'Bybit', 'OKX']
 
   const totalForeignTWD = computed(() =>
     foreignDeposits.value

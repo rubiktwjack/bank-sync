@@ -61,11 +61,12 @@ function loadExchangeConfigs(): { exchangeId: string; credentials: ExchangeCrede
     if (process.env[`${prefix}ENABLED`] !== 'true') continue
     const apiKey = process.env[`${prefix}API_KEY`] ?? ''
     const secretKey = process.env[`${prefix}SECRET_KEY`] ?? ''
+    const passphrase = process.env[`${prefix}PASSPHRASE`]
     if (!apiKey || !secretKey) {
       logger.warn(`${exchangeId} 已啟用但缺少 API Key，跳過`)
       continue
     }
-    configs.push({ exchangeId, credentials: { apiKey, secretKey } })
+    configs.push({ exchangeId, credentials: { apiKey, secretKey, passphrase } })
   }
   return configs
 }

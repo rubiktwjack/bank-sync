@@ -5,6 +5,8 @@ import type { BankScrapedData, ScrapedForeignDeposit } from '../types.js'
 export interface ExchangeCredentials {
   apiKey: string
   secretKey: string
+  /** OKX 等交易所簽名需要的 Passphrase（建立 API Key 時設定） */
+  passphrase?: string
 }
 
 /**

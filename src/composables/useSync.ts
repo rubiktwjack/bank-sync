@@ -81,6 +81,7 @@ export const SYNC_TARGETS = [
   { id: 'bingx', name: 'BingX', icon: '💰' },
   { id: 'binance', name: 'Binance', icon: '💰' },
   { id: 'bybit', name: 'Bybit', icon: '💰' },
+  { id: 'okx', name: 'OKX', icon: '💰' },
 ] as const
 
 /**

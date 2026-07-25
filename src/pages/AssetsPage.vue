@@ -27,7 +27,7 @@ const depositsByBank = computed(() => {
 })
 
 // 交易所名單（排除加密貨幣，只顯示銀行外幣）
-const EXCHANGES = ['BingX', 'Binance', 'Bybit']
+const EXCHANGES = ['BingX', 'Binance', 'Bybit', 'OKX']
 
 // 按銀行分組外幣存款（排除交易所）
 const foreignByBank = computed(() => {

@@ -2,11 +2,13 @@ import type { BaseExchange } from './base-exchange.js'
 import { BingxExchange } from './bingx.js'
 import { BinanceExchange } from './binance.js'
 import { BybitExchange } from './bybit.js'
+import { OkxExchange } from './okx.js'
 
 const registry: Record<string, () => BaseExchange> = {
   bingx: () => new BingxExchange(),
   binance: () => new BinanceExchange(),
   bybit: () => new BybitExchange(),
+  okx: () => new OkxExchange(),
 }
 
 export function createExchange(exchangeId: string): BaseExchange {
